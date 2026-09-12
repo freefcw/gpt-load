@@ -129,3 +129,94 @@ func TestCodexRefreshWithoutNewIDTokenPreservesKnownIdentity(t *testing.T) {
 		})
 	}
 }
+
+func identityTestJWT(t *testing.T, userID string) string {
+	t.Helper()
+	return identityTestToken(t, map[string]string{
+		"chatgpt_account_id": "team-workspace",
+		"user_id":            userID,
+	}, false)
+}
+
+// 同一个 ChatGPT Team 工作区下的两个成员共享 chatgpt_account_id，只有 user id
+// 能区分它们；身份必须分开，否则第二个成员会被判成重复导入并跳过。
+// 分隔符沿用当前实现的 account/user（上游 #639 已按这个口径落库）。
+func TestCodexTeamMembersSharingAccountIDGetDistinctIdentities(t *testing.T) {
+	driver := newCodexDriver()
+	parse := func(userID, email string) string {
+		raw, err := json.Marshal(map[string]string{
+			"type":          "codex",
+			"id_token":      identityTestJWT(t, userID),
+			"access_token":  "access-secret",
+			"refresh_token": "refresh-" + userID,
+			"account_id":    "team-workspace",
+			"email":         email,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		credential, parseErr := driver.Parse(raw)
+		if parseErr != nil {
+			t.Fatal(parseErr)
+		}
+		return credential.Identity()
+	}
+	first := parse("user-one", "first@example.com")
+	second := parse("user-two", "second@example.com")
+	if first == second {
+		t.Fatalf("team members share identity %q", first)
+	}
+	if first != "team-workspace/user-one" || second != "team-workspace/user-two" {
+		t.Fatalf("identities = %q, %q", first, second)
+	}
+}
+
+// 凭据里没有可解析的 user id 时身份退回 account id，保持既有行为不变。
+func TestCodexIdentityFallsBackToAccountID(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		value Credential
+	}{
+		{name: "opaque tokens", value: Credential{AccountID: "account-one", AccessToken: "access-secret"}},
+		{name: "jwt without uid", value: Credential{AccountID: "account-one", IDToken: identityTestJWT(t, "")}},
+		{name: "malformed jwt", value: Credential{AccountID: "account-one", IDToken: "not.a.jwt"}},
+	} {
+		if got := credentialIdentity(test.value); got != "account-one" {
+			t.Fatalf("%s: credentialIdentity() = %q, want account-one", test.name, got)
+		}
+	}
+}
+
+// id_token 缺失时从 access_token 取回同一身份，两者携带相同的 auth 声明。
+func TestCodexIdentityReadsAccessTokenWhenIDTokenMissing(t *testing.T) {
+	value := Credential{AccountID: "team-workspace", AccessToken: identityTestJWT(t, "user-one")}
+	if got := credentialIdentity(value); got != "team-workspace/user-one" {
+		t.Fatalf("credentialIdentity() = %q", got)
+	}
+}
+
+// 身份必须在 canonical 往返后保持不变，否则入组比对会把凭据判成身份变更。
+func TestCodexIdentitySurvivesCanonicalRoundTrip(t *testing.T) {
+	driver := newCodexDriver()
+	raw, err := json.Marshal(map[string]string{
+		"type":          "codex",
+		"id_token":      identityTestJWT(t, "user-one"),
+		"access_token":  "access-secret",
+		"refresh_token": "refresh-secret",
+		"account_id":    "team-workspace",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := driver.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reparsed, err := driver.Parse(credential.Canonical())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reparsed.Identity() != credential.Identity() || reparsed.Identity() != "team-workspace/user-one" {
+		t.Fatalf("identity drifted: %q -> %q", credential.Identity(), reparsed.Identity())
+	}
+}

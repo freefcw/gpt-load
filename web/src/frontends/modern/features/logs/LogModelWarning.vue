@@ -39,11 +39,17 @@ const description = computed(() =>
   <AppTooltip v-else-if="mismatch || unknown" :label="title + '\n' + description">
     <span
       class="modern-log-model-warning"
-      :class="{ 'is-unknown': unknown }"
+      :class="{
+        'is-unknown': unknown,
+        'is-mismatch-pill': mismatch && row.upstream_reported_model,
+      }"
       tabindex="0"
       :aria-label="title + '\n' + description"
     >
       <AppIcon :icon="mismatch ? TriangleAlert : CircleHelp" size="inherit" />
+      <span v-if="mismatch && row.upstream_reported_model" class="modern-log-model-mismatch-text">
+        ↳ {{ row.upstream_reported_model }}
+      </span>
     </span>
   </AppTooltip>
 </template>
@@ -55,6 +61,23 @@ const description = computed(() =>
   width: fit-content;
   align-items: center;
   color: var(--modern-danger);
+}
+.modern-log-model-warning.is-mismatch-pill {
+  gap: var(--modern-space-1);
+  padding: var(--modern-space-0-5) var(--modern-space-1-5);
+  border-radius: var(--modern-radius-small);
+  background: var(--modern-danger-soft);
+  border: var(--modern-line-width) solid var(--modern-danger);
+  font-size: var(--modern-font-size-caption);
+  font-weight: var(--modern-weight-semibold);
+  font-family: var(--modern-font-mono);
+  line-height: var(--modern-leading-compact);
+}
+.modern-log-model-mismatch-text {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .modern-log-model-warning:focus-visible {
   outline: var(--modern-focus-width) solid currentColor;

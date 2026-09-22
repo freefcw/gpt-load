@@ -1090,11 +1090,13 @@ func baseExecutionResult(
 	usageEvidence *execution.UsageEvidence,
 	errorEvidence *execution.ErrorEvidence,
 ) UpstreamResult {
+	mismatch := model != "" && input.UpstreamModelID != "" && model != input.UpstreamModelID
 	result := UpstreamResult{
 		StatusCode:            statusCode,
 		Header:                cloneEndToEndHeaders(header),
 		UpstreamReportedModel: model,
 		ResponseModelObserved: model != "",
+		ResponseModelMismatch: mismatch,
 		RequestWritten:        dispatchState == execution.DispatchMaybeSent,
 		DispatchState:         dispatchState,
 		ResponseStarted:       responseStarted,

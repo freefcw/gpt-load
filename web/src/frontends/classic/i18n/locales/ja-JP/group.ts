@@ -631,6 +631,7 @@ export default {
         connectDuplicatedAccounts:
           '{added} 件を接続し、次の既存アカウントをスキップしました：{accounts}',
         sync: '同期',
+        refreshQuotaTooltip: '利用枠を更新',
         syncingQuota: 'クォータ情報を同期中',
         searchPlaceholder: 'アカウント、メール、またはマスク',
         selectAccount: 'アカウント {account} を選択',
@@ -699,6 +700,7 @@ export default {
         expandDetails: '統計データを展開',
         collapseDetails: '統計データを折りたたむ',
         synced: '同期',
+        syncAgePrefix: '同期',
         syncTime: '同期時刻\n{time}',
         lastUsed: '最終利用',
         lastQuotaSync: '利用枠の最終同期',

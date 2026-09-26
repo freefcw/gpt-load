@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Prepares an Amp orb for gpt-load: Go toolchain from go.mod, pnpm via the
+# web/package.json packageManager pin, module/web dependencies, and a warm Go
+# build cache. Safe to rerun on a restored snapshot.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+step() {
+  local name="$1"
+  shift
+  local start=$SECONDS
+  echo "==> ${name}"
+  "$@"
+  echo "<== ${name} ($((SECONDS - start))s)"
+}
+
+# Go: install the exact version CI uses (actions/setup-go reads go.mod).
+go_version="$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' go.mod)"
+if [[ -z "$go_version" ]]; then
+  go_version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+fi
+case "$(uname -m)" in
+  x86_64) go_arch=amd64 ;;
+  aarch64 | arm64) go_arch=arm64 ;;
+  *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+install_go() {
+  if [[ "$(cat /usr/local/go/VERSION 2>/dev/null | head -n1)" == "go${go_version}" ]]; then
+    echo "go${go_version} already installed"
+  else
+    local archive
+    archive="$(mktemp)"
+    curl -fsSL --retry 3 -o "$archive" "https://go.dev/dl/go${go_version}.linux-${go_arch}.tar.gz"
+    sudo rm -rf /usr/local/go
+    sudo tar -C /usr/local -xzf "$archive"
+    rm -f "$archive"
+  fi
+  # /usr/local/bin is already on PATH for login shells and supervised services.
+  sudo ln -sfn /usr/local/go/bin/go /usr/local/bin/go
+  sudo ln -sfn /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+  go version
+}
+step "Install Go ${go_version}" install_go
+
+# The Makefile runs `corepack pnpm`; the orb's preinstalled corepack 0.20
+# cannot resolve pnpm 11, so upgrade it when older than the verified version.
+corepack_min=0.36.0
+upgrade_corepack() {
+  local current
+  current="$(corepack --version 2>/dev/null || echo 0)"
+  if [[ "$(printf '%s\n%s\n' "$corepack_min" "$current" | sort -V | head -n1)" == "$corepack_min" ]]; then
+    echo "corepack ${current} is new enough"
+  else
+    sudo npm install -g --no-audit --no-fund "corepack@${corepack_min}"
+  fi
+  # Make runs `corepack pnpm --dir web` from the repo root, where corepack
+  # cannot see web/package.json, so pin its global default to the same version.
+  local package_manager
+  package_manager="$(node -p 'require("./web/package.json").packageManager')"
+  COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack install -g "$package_manager"
+  COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm --version
+}
+step "Prepare corepack and pnpm" upgrade_corepack
+
+download_go_modules() {
+  go mod download
+  (cd third_party/cpaembedded && go mod download)
+}
+step "Download Go modules" download_go_modules
+
+install_web_deps() {
+  COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm --dir web install --frozen-lockfile
+}
+step "Install web dependencies" install_web_deps
+
+# Compile packages and test binaries once so the first build/test in a thread
+# reuses the cache instead of compiling every dependency from scratch.
+warm_go_cache() {
+  go build ./...
+  go test -run '^$' . ./internal/... >/dev/null
+}
+step "Warm Go build cache" warm_go_cache
+
+echo "gpt-load orb setup complete"

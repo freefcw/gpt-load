@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# gpt-load needs no authentication or background services on wake; only
+# confirm the toolchain restored from the snapshot is still on PATH.
+set -euo pipefail
+
+command -v go >/dev/null || { echo "go is missing; rerun .agents/setup" >&2; exit 1; }
+command -v corepack >/dev/null || { echo "corepack is missing; rerun .agents/setup" >&2; exit 1; }

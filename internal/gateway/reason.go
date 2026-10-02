@@ -69,6 +69,11 @@ var (
 		Code:    "access_key_concurrency_limited",
 		Message: "Access key concurrency limit exceeded.",
 	}
+	reasonConcurrencyLimitExceeded = reason{
+		Status:  http.StatusTooManyRequests,
+		Code:    "concurrency_limit_exceeded",
+		Message: "Concurrency limit exceeded.",
+	}
 	reasonCredentialRateLimited = reason{
 		Status:  http.StatusTooManyRequests,
 		Code:    "credential_rate_limited",

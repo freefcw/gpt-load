@@ -1,10 +1,14 @@
 package control
 
+import "gpt-load/internal/ratelimit"
+
 // LiveLimitUsage 是访问密钥与凭据的本地限额实时用量来源。它读取的是网关进程
 // 内的限流器计数，不落库；管理面按固定间隔轮询展示。
 type LiveLimitUsage interface {
 	AccessKeyUsage(accessKeyID uint) (rpmUsed, inFlight int64)
 	CredentialUsage(credentialID uint) (rpmUsed, inFlight int64)
+	DataPlaneUsage() DataPlaneConcurrencyUsage
+	DataPlaneConfigured() bool
 }
 
 type accessKeyRPMUsageSource interface {
@@ -24,9 +28,15 @@ func NewLiveLimitUsage(
 	accessKeyRPM accessKeyRPMUsageSource,
 	accessKeyConcurrency accessKeyConcurrencyUsageSource,
 	credentials credentialUsageSource,
+	dataPlane ...*ratelimit.DataPlaneConcurrency,
 ) LiveLimitUsage {
+	var dataPlaneLimiter *ratelimit.DataPlaneConcurrency
+	if len(dataPlane) > 0 {
+		dataPlaneLimiter = dataPlane[0]
+	}
 	return liveLimitUsage{
 		accessKeyRPM: accessKeyRPM, accessKeyConcurrency: accessKeyConcurrency, credentials: credentials,
+		dataPlane: dataPlaneLimiter,
 	}
 }
 
@@ -34,6 +44,7 @@ type liveLimitUsage struct {
 	accessKeyRPM         accessKeyRPMUsageSource
 	accessKeyConcurrency accessKeyConcurrencyUsageSource
 	credentials          credentialUsageSource
+	dataPlane            *ratelimit.DataPlaneConcurrency
 }
 
 func (usage liveLimitUsage) AccessKeyUsage(accessKeyID uint) (int64, int64) {
@@ -52,6 +63,18 @@ func (usage liveLimitUsage) CredentialUsage(credentialID uint) (int64, int64) {
 		return 0, 0
 	}
 	return usage.credentials.Usage(credentialID)
+}
+
+func (usage liveLimitUsage) DataPlaneUsage() DataPlaneConcurrencyUsage {
+	if usage.dataPlane == nil {
+		return DataPlaneConcurrencyUsage{}
+	}
+	snapshot := usage.dataPlane.Snapshot()
+	return DataPlaneConcurrencyUsage{Global: snapshot.Global, Groups: snapshot.Groups}
+}
+
+func (usage liveLimitUsage) DataPlaneConfigured() bool {
+	return usage.dataPlane != nil
 }
 
 func (s *Service) accessKeyLiveUsage(accessKeyID uint) (rpmUsed, inFlight int64) {

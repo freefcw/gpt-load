@@ -140,6 +140,12 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 		return decision, result
 	}
 	frozenPricing := handler.freezeAttemptPricing(selection, metadata, true, key.PriceMultiplier)
+	releaseGroup, groupAllowed := handler.acquireGroupConcurrency(selection.Group)
+	if !groupAllowed {
+		decision.Reason = reasonConcurrencyLimitExceeded.Code
+		return decision, result
+	}
+	defer releaseGroup()
 	result = handler.forwarder.Forward(decisionCtx, ForwardInput{
 		Dialect: decisionDialect, ObserveUsage: true,
 		Group: selection.Group, APIKey: credential.apiKey,
@@ -158,6 +164,7 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 		),
 		Proxy: effectiveProxy, ProxyFingerprint: proxyFingerprint,
 	})
+	releaseGroup()
 	result = normalizeUpstreamResultContract(result)
 	decision.Called = result.DispatchState == execution.DispatchMaybeSent
 	if decision.Called {

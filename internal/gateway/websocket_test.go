@@ -116,6 +116,46 @@ func TestWebsocketIdleUpstreamDisconnectClosesClient(t *testing.T) {
 	}
 }
 
+func TestWebsocketTurnRejectsWhenGlobalConcurrencyIsFull(t *testing.T) {
+	var upstreamHits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamHits.Add(1)
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	defer upstream.Close()
+	h, engine, _ := websocketTestHandler(t, upstream.URL, channel.OpenAI)
+	h.manager.Current().Settings.GlobalConcurrencyLimit = 1
+	held, ok := h.dataPlane.AcquireGlobal(1)
+	if !ok {
+		t.Fatal("failed to occupy global concurrency")
+	}
+	defer held()
+	server := httptest.NewServer(engine)
+	defer server.Close()
+	conn := dialGatewayWebsocket(t, server.URL)
+	if err := conn.WriteMessage(websocket.TextMessage, []byte("{\"type\":\"response.create\",\"model\":\"public\",\"input\":\"hello\"}")); err != nil {
+		t.Fatal(err)
+	}
+	_, body, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var message map[string]any
+	if err := json.Unmarshal(body, &message); err != nil {
+		t.Fatal(err)
+	}
+	errorObject, ok := message["error"].(map[string]any)
+	if !ok || errorObject["code"] != reasonConcurrencyLimitExceeded.Code {
+		t.Fatalf("websocket error = %#v, want code %s", message["error"], reasonConcurrencyLimitExceeded.Code)
+	}
+	if upstreamHits.Load() != 0 {
+		t.Fatalf("upstream hits = %d, want 0", upstreamHits.Load())
+	}
+}
+
 func TestWebsocketQuotaCountsConcurrentTurnsOnceWithoutReservation(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)

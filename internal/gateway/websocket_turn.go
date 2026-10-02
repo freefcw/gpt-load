@@ -180,6 +180,12 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		return
 	}
 	defer releaseConcurrency()
+	releaseGlobal, globalAllowed := h.acquireGlobalConcurrency(snapshot.Settings.GlobalConcurrencyLimit)
+	if !globalAllowed {
+		reject(reasonConcurrencyLimitExceeded)
+		return
+	}
+	defer releaseGlobal()
 	original, err := inspectWebsocketRequest(turn.body)
 	if err != nil {
 		reject(reasonInvalidProtocolRequest)
@@ -539,6 +545,12 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			recorder.completeCanceled(requestCtx, 0, -1)
 			return
 		}
+		releaseGroup, groupAllowed := h.acquireGroupConcurrency(selection.Group)
+		if !groupAllowed {
+			reject(reasonConcurrencyLimitExceeded)
+			return
+		}
+		defer releaseGroup()
 		recorder.setReasoning(effective.metadata.Reasoning)
 		recorder.setUsageApplicable(effective.metadata.ObserveUsage)
 		recorder.setPricingMode(effective.metadata.PricingMode)
@@ -617,6 +629,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			result.Err = nil
 		}
 		cancel()
+		releaseGroup()
 		releaseInput()
 		for _, name := range []string{"X-Request-Id", "Request-Id", "Openai-Request-Id", "X-Oai-Request-Id"} {
 			if value := result.Header.Get(name); value != "" && len(value) <= 1024 {
@@ -1127,6 +1140,10 @@ func (s *websocketConnection) runWebsocketAttempt(ctx context.Context, cancel co
 		} else if err := emitRestored(ctx, frames); err != nil {
 			restoreFailure = err
 		}
+	}
+	if wsResult.AppliedReasoning != nil {
+		recorder.setReasoning(*wsResult.AppliedReasoning)
+		result.AppliedReasoning = wsResult.AppliedReasoning.Clone()
 	}
 	first.stop()
 	if idle != nil {

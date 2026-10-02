@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -55,6 +56,31 @@ func TestCodexLiveRetryBudgetAndReplaySafety(t *testing.T) {
 				t.Fatal("last attempt claims a retry that did not occur")
 			}
 		})
+	}
+}
+
+func TestCodexLiveRejectsWhenGlobalConcurrencyIsFull(t *testing.T) {
+	fake := &liveFakeOpener{}
+	handler, engine, _, _, _ := liveGatewayFixture(t, fake)
+	handler.manager.Current().Settings.GlobalConcurrencyLimit = 1
+	held, ok := handler.dataPlane.AcquireGlobal(1)
+	if !ok {
+		t.Fatal("failed to occupy global concurrency")
+	}
+	defer held()
+	server := httptest.NewServer(engine)
+	defer server.Close()
+	_, offer := liveClientOffer(t)
+	response := liveRequest(t, server.Client(), http.MethodPost, server.URL+"/v1/live", "gl-client", "application/sdp", []byte(offer))
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(body), reasonConcurrencyLimitExceeded.Code) {
+		t.Fatalf("status=%d body=%s", response.StatusCode, body)
+	}
+	if len(fake.attempted) != 0 {
+		t.Fatalf("upstream attempts=%v, want none", fake.attempted)
 	}
 }
 

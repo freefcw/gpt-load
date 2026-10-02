@@ -91,12 +91,14 @@ func BuildContainer() (*dig.Container, error) {
 		func(limiter *ratelimit.CredentialLimiter) gateway.CredentialLimiter {
 			return limiter
 		},
+		ratelimit.NewDataPlaneConcurrency,
 		func(
 			accessKeyRPM *ratelimit.AccessKeyRPM,
 			accessKeyConcurrency *ratelimit.AccessKeyConcurrency,
 			credentials *ratelimit.CredentialLimiter,
+			dataPlane *ratelimit.DataPlaneConcurrency,
 		) control.LiveLimitUsage {
-			return control.NewLiveLimitUsage(accessKeyRPM, accessKeyConcurrency, credentials)
+			return control.NewLiveLimitUsage(accessKeyRPM, accessKeyConcurrency, credentials, dataPlane)
 		},
 		func(manager *state.Manager) requestlog.RetentionPolicyProvider {
 			return retentionSnapshotProvider{manager: manager}

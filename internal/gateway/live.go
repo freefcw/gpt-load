@@ -169,6 +169,10 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 	recorder := newRequestRecorder(handler.requestLogSink, id, request.requestStarted, request.accessKey.ID, protocol.CodexLive, handler.requestNow)
 	recorder.setOperation(execution.OperationLiveCall)
 	stored := false
+	var requestLease *liveRequestLease
+	defer func() {
+		requestLease.releaseOnReturn()
+	}()
 	defer func() {
 		if !stored {
 			recorder.completeMissingOutcome(c.Writer.Written(), c.Writer.Status())
@@ -197,6 +201,12 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 	if !limit.Allowed {
 		c.Header("Retry-After", strconv.Itoa(retryAfterSeconds(limit.RetryAfter)))
 		failed(reasonAccessKeyRateLimited)
+		return
+	}
+	var leaseFailure *reason
+	requestLease, leaseFailure = handler.acquireLiveRequestLease(request)
+	if leaseFailure != nil {
+		failed(*leaseFailure)
 		return
 	}
 	if !handler.liveSessions.reserve() {
@@ -291,6 +301,12 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 			failed(reasonInvalidProtocolRequest)
 			return
 		}
+		attemptLease, groupAllowed := handler.acquireLiveAttemptLease(selection.Group)
+		if !groupAllowed {
+			failed(reasonConcurrencyLimitExceeded)
+			return
+		}
+		defer attemptLease.releaseOnReturn()
 		var media *liveMediaSession
 		upstreamOffer := offer
 		if selection.Group.CodexLiveMode == state.CodexLiveRelay {
@@ -316,12 +332,22 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 		updateDebugHeaders(c.Writer.Header(), selection.Group.Name, sequence)
 		upstream, evidence := handler.liveOpener.OpenLive(setupContext, spec, upstreamOffer, sessionJSON)
 		upstreamStored := false
-		defer func() {
-			if !upstreamStored && upstream.Session != nil {
-				handler.cleanupCodexLiveSetup(upstream, id)
+		cleanupUpstream := func() {
+			if upstreamStored || upstream.Session == nil {
+				return
 			}
+			upstreamStored = true
+			handler.cleanupCodexLiveSetup(upstream, id, attemptLease.handoff())
+		}
+		defer func() {
+			cleanupUpstream()
 		}()
 		if evidence != nil {
+			if upstream.Session != nil {
+				cleanupUpstream()
+			} else {
+				attemptLease.releaseOnReturn()
+			}
 			status := http.StatusBadGateway
 			if evidence.StatusCode >= 400 && evidence.StatusCode < 600 {
 				status = evidence.StatusCode
@@ -364,6 +390,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 			continue
 		}
 		if upstream.Session == nil || upstream.CallID == "" {
+			attemptLease.releaseOnReturn()
 			failed(reasonLiveUnavailable)
 			return
 		}
@@ -371,11 +398,13 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 		if media != nil {
 			answer, err = media.AcceptAnswer(setupContext, upstream.SDP)
 			if err != nil {
+				attemptLease.releaseOnReturn()
 				failed(reasonLiveUnavailable)
 				return
 			}
 		}
 		if strings.TrimSpace(answer) == "" {
+			attemptLease.releaseOnReturn()
 			failed(reasonLiveUnavailable)
 			return
 		}
@@ -395,14 +424,19 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 			}
 		}
 		if keyHash == "" {
+			attemptLease.releaseOnReturn()
 			failed(reasonConfigurationChanged)
 			return
 		}
+		releaseAttempt := attemptLease.handoff()
+		releaseRequest := requestLease.handoff()
 		call := &liveCallSession{id: upstream.CallID, requestID: id, keyID: request.accessKey.ID, keyHash: keyHash, groupID: selection.GroupID,
 			clientModel: model, model: *selection.UpstreamModelID, peerAddr: c.Request.RemoteAddr,
-			ref: ref, upstream: upstream.Session, media: media, recorder: recorder, logger: handler.logger}
+			ref: ref, upstream: upstream.Session, media: media, recorder: recorder, logger: handler.logger,
+			releaseConcurrency: func() { releaseAttempt(); releaseRequest() }}
 		call.authorized = func() bool { return handler.liveCallAuthorized(call.keyID, call) }
 		if !handler.liveSessions.put(call) {
+			call.releaseConcurrency()
 			failed(reasonLiveUnavailable)
 			return
 		}
@@ -423,9 +457,9 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 	failed(failure)
 }
 
-func (handler *Handler) cleanupCodexLiveSetup(upstream execution.LiveCall, requestID string) {
+func (handler *Handler) cleanupCodexLiveSetup(upstream execution.LiveCall, requestID string, releaseConcurrency func()) {
 	// 建连失败的日志由请求路径记录，清理会话不再拥有 recorder。
-	call := &liveCallSession{id: upstream.CallID, requestID: requestID, upstream: upstream.Session, logger: handler.logger}
+	call := &liveCallSession{id: upstream.CallID, requestID: requestID, upstream: upstream.Session, logger: handler.logger, releaseConcurrency: releaseConcurrency}
 	if call.id != "" && handler.liveSessions.put(call) {
 		_ = handler.liveSessions.finishCall(call, "setup_failed")
 		return
@@ -437,6 +471,9 @@ func (handler *Handler) cleanupCodexLiveSetup(upstream execution.LiveCall, reque
 	call.hangupAttempts++
 	if err := call.upstream.Hangup(ctx); err != nil {
 		call.logHangupFailure(err, false)
+	}
+	if call.releaseConcurrency != nil {
+		call.releaseConcurrency()
 	}
 }
 

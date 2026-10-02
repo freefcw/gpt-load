@@ -16,6 +16,7 @@ import (
 	"gpt-load/internal/channel"
 	"gpt-load/internal/dialect"
 	"gpt-load/internal/health"
+	"gpt-load/internal/platform/config"
 	"gpt-load/internal/state"
 	"gpt-load/internal/testutil/encryptiontest"
 )
@@ -59,6 +60,7 @@ func TestMistralRealtimeCopiesFramesWithUpstreamKey(t *testing.T) {
 	}
 	input := state.CompileInput{
 		ChannelRegistry: channel.NewRegistry(),
+		SystemSettings:  config.Settings{state.SettingGlobalConcurrencyLimit: json.Number("1")},
 		Groups: []state.GroupConfig{{
 			ID: 1, Name: "mistral", ConnectionType: "api_key", ChannelID: channel.Mistral,
 			Params: params, Models: []state.ModelConfig{{ID: upstreamModel, Alias: "public"}}, Enabled: true,
@@ -115,6 +117,44 @@ func TestMistralRealtimeCopiesFramesWithUpstreamKey(t *testing.T) {
 	if missingResponse.StatusCode != http.StatusBadRequest || !strings.Contains(string(missingBody), "invalid_protocol_request") {
 		t.Fatalf("missing model = %d %s", missingResponse.StatusCode, missingBody)
 	}
+	blockedRequest := func() *http.Response {
+		request, err := http.NewRequest(http.MethodGet, gateway.URL+"/v1/audio/transcriptions/realtime?model=public", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer gl-client")
+		request.Header.Set("Connection", "Upgrade")
+		request.Header.Set("Upgrade", "websocket")
+		request.Header.Set("Sec-WebSocket-Version", "13")
+		request.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+	heldGlobal, ok := handler.dataPlane.AcquireGlobal(1)
+	if !ok {
+		t.Fatal("failed to occupy global concurrency")
+	}
+	blocked := blockedRequest()
+	blockedBody, _ := io.ReadAll(blocked.Body)
+	_ = blocked.Body.Close()
+	if blocked.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(blockedBody), reasonConcurrencyLimitExceeded.Code) {
+		t.Fatalf("global limit status=%d body=%s", blocked.StatusCode, blockedBody)
+	}
+	heldGlobal()
+	heldGroup, ok := handler.dataPlane.AcquireGroup(1, 1)
+	if !ok {
+		t.Fatal("failed to occupy group concurrency")
+	}
+	blocked = blockedRequest()
+	blockedBody, _ = io.ReadAll(blocked.Body)
+	_ = blocked.Body.Close()
+	heldGroup()
+	if blocked.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(blockedBody), reasonConcurrencyLimitExceeded.Code) {
+		t.Fatalf("group limit status=%d body=%s", blocked.StatusCode, blockedBody)
+	}
 
 	client, response, err := websocket.DefaultDialer.Dial(
 		"ws"+strings.TrimPrefix(gateway.URL, "http")+"/v1/audio/transcriptions/realtime?model=public",
@@ -147,7 +187,7 @@ func TestMistralRealtimeCopiesFramesWithUpstreamKey(t *testing.T) {
 	if seenAuth != "Bearer upstream-key" || seenModel != upstreamModel || seenPath != "/v1/audio/transcriptions/realtime" {
 		t.Fatalf("upstream saw auth=%q model=%q path=%q", seenAuth, seenModel, seenPath)
 	}
-	events := waitWebsocketLogs(t, sink, 3)
+	events := waitWebsocketLogs(t, sink, 5)
 	event := events[len(events)-1]
 	attempt := event.Attempts
 	if event.Status != "success" || event.UpstreamModel != upstreamModel || len(attempt) != 1 || attempt[0].CredentialID != 1 || attempt[0].GroupID != 1 || attempt[0].StatusCode != http.StatusSwitchingProtocols {

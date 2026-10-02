@@ -28,21 +28,22 @@ const (
 )
 
 type liveCallSession struct {
-	id          string
-	requestID   string
-	keyID       uint
-	keyHash     string
-	groupID     uint
-	clientModel string
-	model       string
-	peerAddr    string
-	ref         state.CredentialRef
-	upstream    execution.LiveSession
-	media       *liveMediaSession
-	logger      *logrus.Logger
-	recorder    *requestRecorder
-	closedOnce  sync.Once
-	finishMu    sync.Mutex
+	releaseConcurrency func()
+	id                 string
+	requestID          string
+	keyID              uint
+	keyHash            string
+	groupID            uint
+	clientModel        string
+	model              string
+	peerAddr           string
+	ref                state.CredentialRef
+	upstream           execution.LiveSession
+	media              *liveMediaSession
+	logger             *logrus.Logger
+	recorder           *requestRecorder
+	closedOnce         sync.Once
+	finishMu           sync.Mutex
 	// 挂断重试只负责清理；本地会话结果只记录一次，由 finishMu 保护。
 	hangupAttempts int
 	logged         bool
@@ -253,12 +254,18 @@ func (store *liveSessions) attemptFinish(call *liveCallSession) error {
 		hangupErr = nil
 	}
 	retry := hangupErr != nil && !store.closing && call.hangupAttempts < liveHangupMaxAttempts
+	var releaseConcurrency func()
 	if retry {
 		call.timer = time.AfterFunc(liveHangupRetryDelay, func() { _ = store.attemptFinish(call) })
 	} else {
 		delete(store.calls, call.id)
+		releaseConcurrency = call.releaseConcurrency
+		call.releaseConcurrency = nil
 	}
 	store.mu.Unlock()
+	if releaseConcurrency != nil {
+		releaseConcurrency()
+	}
 	if hangupErr != nil {
 		call.logHangupFailure(hangupErr, retry)
 		reason = "hangup_failed"

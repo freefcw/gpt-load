@@ -154,6 +154,7 @@ func (rules HeaderRules) ConfiguredNames() []string {
 }
 
 type GroupView struct {
+	ConcurrencyLimit           int64
 	PriceMultiplier            pricing.PriceMultiplier
 	ID                         uint
 	Name                       string
@@ -180,12 +181,13 @@ type GroupView struct {
 }
 
 type GroupCatalogView struct {
-	ID             uint
-	Name           string
-	ChannelID      channel.ID
-	ConnectionType string
-	Enabled        bool
-	WeightManual   *int
+	ConcurrencyLimit int64
+	ID               uint
+	Name             string
+	ChannelID        channel.ID
+	ConnectionType   string
+	Enabled          bool
+	WeightManual     *int
 }
 
 type AccessKeyView struct {
@@ -328,13 +330,6 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 	}
 
 	for _, group := range input.Groups {
-		catalogView := GroupCatalogView{
-			ID: group.ID, Name: group.Name, Enabled: group.Enabled,
-			ChannelID:      group.ChannelID,
-			ConnectionType: connection.Normalize(group.ConnectionType),
-			WeightManual:   cloneWeight(group.WeightManual),
-		}
-		snapshot.GroupCatalog[group.ID] = catalogView
 		if err := appendExecutionTargets(snapshot.ExecutionRouteCatalog, input.ChannelRegistry, group); err != nil {
 			return nil, err
 		}
@@ -342,6 +337,14 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 		if err != nil {
 			return nil, fmt.Errorf("compile group %d settings: %w", group.ID, err)
 		}
+		catalogView := GroupCatalogView{
+			ConcurrencyLimit: resolved.ConcurrencyLimit,
+			ID:               group.ID, Name: group.Name, Enabled: group.Enabled,
+			ChannelID:      group.ChannelID,
+			ConnectionType: connection.Normalize(group.ConnectionType),
+			WeightManual:   cloneWeight(group.WeightManual),
+		}
+		snapshot.GroupCatalog[group.ID] = catalogView
 		groupProxy, err := outboundproxy.Resolve(nil, group.Proxy, input.GlobalProxy, input.EnvironmentProxy)
 		if err != nil {
 			return nil, fmt.Errorf("compile group %d proxy: %w", group.ID, err)
@@ -351,6 +354,7 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 		}
 
 		view := GroupView{
+			ConcurrencyLimit:           resolved.ConcurrencyLimit,
 			PriceMultiplier:            resolvePriceMultiplier(group.PriceMultiplier),
 			ID:                         group.ID,
 			Name:                       group.Name,

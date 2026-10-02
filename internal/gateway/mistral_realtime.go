@@ -93,17 +93,30 @@ func (handler *Handler) handleMistralRealtime(c *gin.Context, request *dataPlane
 		failed(reasonAccessKeyRateLimited)
 		return
 	}
+	releaseConcurrency, concurrencyAllowed := handler.concurrency.Acquire(request.accessKey.ID, request.accessKey.ConcurrencyLimit)
+	if !concurrencyAllowed {
+		failed(reasonAccessKeyConcurrencyLimited)
+		return
+	}
+	defer releaseConcurrency()
+	releaseGlobal, globalAllowed := handler.acquireGlobalConcurrency(request.snapshot.Settings.GlobalConcurrencyLimit)
+	if !globalAllowed {
+		failed(reasonConcurrencyLimitExceeded)
+		return
+	}
+	defer releaseGlobal()
 	// Reject a browser origin before spending an upstream handshake. SDK
 	// clients send no Origin and are unaffected.
 	if !websocketOriginAllowed(c.Request, request.snapshot) {
 		failed(reasonMistralRealtimeOrigin)
 		return
 	}
-	upstream, upstreamModel, errReason := handler.dialMistralRealtime(c.Request.Context(), c, request, recorder, model, c.Request.URL.RawQuery)
+	upstream, upstreamModel, releaseGroup, errReason := handler.dialMistralRealtime(c.Request.Context(), c, request, recorder, model, c.Request.URL.RawQuery)
 	if errReason != nil {
 		failed(*errReason)
 		return
 	}
+	defer releaseGroup()
 	defer upstream.Close()
 	upgrader := websocket.Upgrader{
 		HandshakeTimeout: handler.writeTimeout,
@@ -132,7 +145,7 @@ func (handler *Handler) handleMistralRealtime(c *gin.Context, request *dataPlane
 // dialMistralRealtime selects one upstream credential and completes its
 // WebSocket handshake. A failed handshake is judged before the client is
 // upgraded, and only the final 429 receives Retry-After.
-func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context, request *dataPlaneRequestContext, recorder *requestRecorder, model, rawQuery string) (*websocket.Conn, string, *reason) {
+func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context, request *dataPlaneRequestContext, recorder *requestRecorder, model, rawQuery string) (*websocket.Conn, string, func(), *reason) {
 	query := scheduler.Query{
 		ClientProtocol:        request.selectedRoute.Protocol,
 		Operation:             execution.OperationMistralRealtimeTranscription,
@@ -151,7 +164,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 	for sequence := 1; sequence <= retryAttemptLimit(request.snapshot.Settings.RetryCount); sequence++ {
 		if ctx.Err() != nil {
 			value := reason{Status: http.StatusGatewayTimeout, Code: "mistral_realtime_timeout", Message: "Realtime transcription timed out."}
-			return nil, "", &value
+			return nil, "", func() {}, &value
 		}
 		selection, err := iterator.Next()
 		if err != nil {
@@ -159,17 +172,23 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 		}
 		if selection.ChannelID != channel.Mistral || selection.UpstreamModelID == nil || *selection.UpstreamModelID == "" {
 			value := reasonNoCandidate
-			return nil, "", &value
+			return nil, "", func() {}, &value
 		}
 		if handler.manager.Current() != request.snapshot {
 			value := reasonConfigurationChanged
-			return nil, "", &value
+			return nil, "", func() {}, &value
+		}
+		releaseGroup, groupAllowed := handler.acquireGroupConcurrency(selection.Group)
+		if !groupAllowed {
+			value := reasonConcurrencyLimitExceeded
+			return nil, "", func() {}, &value
 		}
 		ref := query.AllowedCredentialRefs[selection.CredentialID]
 		conn, dialFailure, decision := handler.dialMistralRealtimeSelection(ctx, recorder, selection, ref, rawQuery, sequence)
 		if dialFailure == nil {
-			return conn, *selection.UpstreamModelID, nil
+			return conn, *selection.UpstreamModelID, releaseGroup, nil
 		}
+		releaseGroup()
 		failure = *dialFailure
 		if !decision.CooldownUntil.IsZero() {
 			cooldownUntil = decision.CooldownUntil
@@ -179,11 +198,11 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 		}
 		if !decision.ShouldRetry() {
 			handler.setMistralRealtimeRetryAfter(c, failure, cooldownUntil)
-			return nil, "", &failure
+			return nil, "", func() {}, &failure
 		}
 	}
 	handler.setMistralRealtimeRetryAfter(c, failure, cooldownUntil)
-	return nil, "", &failure
+	return nil, "", func() {}, &failure
 }
 
 // setMistralRealtimeRetryAfter adds Retry-After only for the final upstream

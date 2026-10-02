@@ -122,10 +122,16 @@ func TestCodexLiveFailedSetupRetainsKnownUpstreamForCleanup(t *testing.T) {
 	if !pending {
 		t.Fatal("failed setup lost its pending cleanup")
 	}
+	if snapshot := handler.dataPlane.Snapshot(); snapshot.Groups[1] != 1 {
+		t.Fatalf("failed setup released Group concurrency before hangup cleanup: %+v", snapshot)
+	}
 	if events := sink.snapshot(); len(events) != 1 || events[0].Status != telemetry.RequestStatusError {
 		t.Fatalf("setup failure logs = %+v", events)
 	}
 	handler.CloseCodexLive()
+	if snapshot := handler.dataPlane.Snapshot(); snapshot.Global != 0 || snapshot.Groups[1] != 0 {
+		t.Fatalf("failed setup cleanup leaked concurrency: %+v", snapshot)
+	}
 	if len(sink.snapshot()) != 1 {
 		t.Fatal("cleanup duplicated the failed setup log")
 	}

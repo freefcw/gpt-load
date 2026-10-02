@@ -122,6 +122,7 @@ type Handler struct {
 	mutations           credentialMutationCoordinator
 	limiter             AccessKeyRPMLimiter
 	concurrency         AccessKeyConcurrencyLimiter
+	dataPlane           *ratelimit.DataPlaneConcurrency
 	credentialLimiter   CredentialLimiter
 	requestLogSink      telemetry.RequestLogSink
 	priceTables         PriceTableProvider
@@ -196,7 +197,7 @@ func NewHandler(
 	handler := &Handler{
 		manager: manager, channels: channels, subscriptions: subscriptions, registry: registry, encryption: encryptionService,
 		forwarder: forwarder, dialects: dialects, stats: stats, mutations: mutations,
-		limiter: limiter, concurrency: unlimitedAccessKeyConcurrencyLimiter{}, requestLogSink: requestLogSink, priceTables: priceTables,
+		limiter: limiter, concurrency: unlimitedAccessKeyConcurrencyLimiter{}, dataPlane: ratelimit.NewDataPlaneConcurrency(), requestLogSink: requestLogSink, priceTables: priceTables,
 		credentialLimiter: unlimitedCredentialLimiter{},
 		affinityCache:     affinity.NewCache(),
 		responseBindings:  state.NewResponseBindings(),
@@ -242,6 +243,7 @@ func NewHandlerWithLifecycle(
 	limiter AccessKeyRPMLimiter,
 	concurrency AccessKeyConcurrencyLimiter,
 	credentialLimiter CredentialLimiter,
+	dataPlane *ratelimit.DataPlaneConcurrency,
 	requestLogSink telemetry.RequestLogSink,
 	priceTables PriceTableProvider,
 	accessQuota *accessquota.Runtime,
@@ -274,6 +276,9 @@ func NewHandlerWithLifecycle(
 	}
 	if credentialLimiter != nil {
 		handler.credentialLimiter = credentialLimiter
+	}
+	if dataPlane != nil {
+		handler.dataPlane = dataPlane
 	}
 	handler.lifecycle = lifecycle
 	handler.responseBindings = responseBindings
@@ -577,12 +582,21 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 	}
 	// 并发名额在 RPM 之后占用：RPM 拒绝不该消耗在途名额，而已计入 RPM 窗口的
 	// 请求被并发拒绝也不回滚，与上游 429 的计费口径一致。
-	releaseConcurrency, concurrencyAllowed := handler.concurrency.Acquire(accessKey.ID, accessKey.ConcurrencyLimit)
-	if !concurrencyAllowed {
-		handler.completeReason(ginContext, recorder, reasonAccessKeyConcurrencyLimited)
-		return
+	concurrencyControl := concurrencyControlRequest(ginContext.Request, selectedRoute)
+	if !concurrencyControl {
+		releaseConcurrency, concurrencyAllowed := handler.concurrency.Acquire(accessKey.ID, accessKey.ConcurrencyLimit)
+		if !concurrencyAllowed {
+			handler.completeReason(ginContext, recorder, reasonAccessKeyConcurrencyLimited)
+			return
+		}
+		defer releaseConcurrency()
+		releaseGlobal, globalAllowed := handler.acquireGlobalConcurrency(snapshot.Settings.GlobalConcurrencyLimit)
+		if !globalAllowed {
+			handler.completeReason(ginContext, recorder, reasonConcurrencyLimitExceeded)
+			return
+		}
+		defer releaseGlobal()
 	}
-	defer releaseConcurrency()
 	if selectedRoute.Kind == endpointModels {
 		if !contentcoding.IdentityAcceptable(
 			headerFieldValues(ginContext.Request.Header, "Accept-Encoding"),
@@ -770,6 +784,7 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 		requestAffinity,
 		recorder,
 		quotaAdmission,
+		concurrencyControl,
 	)
 }
 
@@ -943,6 +958,7 @@ func (handler *Handler) executeAttempts(
 	requestAffinity requestAffinity,
 	recorder *requestRecorder,
 	quotaAdmission *requestAccessQuotaAdmission,
+	concurrencyControl bool,
 ) {
 	stream := originalMetadata.Stream
 	operation := originalMetadata.Operation
@@ -1391,6 +1407,18 @@ func (handler *Handler) executeAttempts(
 				),
 			)
 		}
+		releaseGroup := func() {}
+		if !concurrencyControl {
+			var groupAllowed bool
+			releaseGroup, groupAllowed = handler.acquireGroupConcurrency(selection.Group)
+			if !groupAllowed {
+				handler.completeReason(ginContext, recorder, reasonConcurrencyLimitExceeded)
+				return
+			}
+			// 与 websocket_turn.go 一致：defer 兜底覆盖 forward panic 路径，
+			// forward 后的显式 releaseGroup() 供重试循环提前放出名额（sync.Once 幂等）。
+			defer releaseGroup()
+		}
 		attemptStarted := recorder.beforeForward()
 		var result UpstreamResult
 		if stream {
@@ -1398,6 +1426,7 @@ func (handler *Handler) executeAttempts(
 		} else {
 			result = handler.forwarder.Forward(ginContext.Request.Context(), input)
 		}
+		releaseGroup()
 		result = normalizeUpstreamResultContract(result)
 		if !stream && result.HasResponse() && !result.ProviderErrorBeforeCommit &&
 			result.DispatchState != execution.DispatchLocal &&

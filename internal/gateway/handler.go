@@ -1207,6 +1207,7 @@ func (handler *Handler) executeAttempts(
 		if !active {
 			continue
 		}
+		recorder.startTiming()
 		// 名额在解密前扣减，覆盖本次尝试的全部生命周期。并发名额在下一轮循环
 		// 开始或函数返回时释放，任何 continue/return 出口都不会泄漏。
 		releaseCredentialSlot, slotAcquired := handler.acquireCredentialSlot(selection)
@@ -1467,6 +1468,7 @@ func (handler *Handler) executeAttempts(
 		)
 		if result.Committed {
 			if recorder != nil {
+				recorder.finishedAt = attemptCompleted
 				recordedAttempt := recorder.recordStreamAttempt(
 					selection, normalizedCredential.secrets, result, decision, attemptStarted, attemptCompleted,
 				)
@@ -1591,8 +1593,9 @@ func (handler *Handler) executeAttempts(
 				recorder.retryIfAnotherForward(recordedAttempt)
 				continue
 			}
+			writeErr := handler.writeUpstreamResponse(ginContext, result)
 			recorder.completeResponse(result, decision, optionalModelValue(selection.UpstreamModelID), recordedAttempt)
-			if err := handler.writeUpstreamResponse(ginContext, result); err != nil {
+			if writeErr != nil {
 				handler.completeWriteTerminal(ginContext, recorder, result.StatusCode)
 				return
 			}
@@ -1658,13 +1661,14 @@ func (handler *Handler) executeAttempts(
 		return
 	}
 	if lastResponse != nil {
+		writeErr := handler.writeUpstreamResponse(ginContext, lastResponse.result)
 		recorder.completeResponse(
 			lastResponse.result,
 			lastResponse.decision,
 			lastResponse.upstreamModel,
 			lastResponse.attemptIndex,
 		)
-		if err := handler.writeUpstreamResponse(ginContext, lastResponse.result); err != nil {
+		if writeErr != nil {
 			handler.completeWriteTerminal(
 				ginContext,
 				recorder,

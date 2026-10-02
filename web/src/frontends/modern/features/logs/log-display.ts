@@ -1,6 +1,7 @@
 import { numberFormatter, dateFormatter } from '@modern/components/ui/intl-formatters'
 import type { LogEntry } from '@modern/api/logs'
 import type { SemanticTone } from '@modern/components/ui'
+import { outputTokensPerSecond } from '@shared/output-rate'
 
 export const logStatusTone: Record<LogEntry['status'], SemanticTone> = {
   success: 'success',
@@ -62,17 +63,8 @@ export function logDuration(ms: number | null, locale: string): string {
   )
 }
 export function logOutputRate(row: LogEntry, locale: string): string {
-  if (
-    !row.stream ||
-    !logHasUsage(row) ||
-    row.first_response_ms === null ||
-    row.duration_ms <= row.first_response_ms
-  )
-    return '—'
-  const output = Number(row.output_tokens)
-  if (!Number.isSafeInteger(output) || output <= 0) return '—'
-  const rate = output / ((row.duration_ms - row.first_response_ms) / 1000)
-  return Number.isFinite(rate)
+  const rate = outputTokensPerSecond(row)
+  return rate !== null && Number.isFinite(rate)
     ? numberFormatter(locale, { maximumFractionDigits: 1 }).format(rate) + ' t/s'
     : '—'
 }

@@ -62,6 +62,8 @@ type requestRecorder struct {
 	sink                 telemetry.RequestLogSink
 	requestID            string
 	startedAt            time.Time
+	timingStarted        bool
+	finishedAt           time.Time
 	accessKeyID          uint
 	accessKeyMultiplier  pricing.PriceMultiplier
 	protocol             protocol.Protocol
@@ -134,7 +136,15 @@ func (recorder *requestRecorder) emit() {
 	recorder.emitted = true
 	recorder.freezeSensitiveInputErrorSummaries()
 	completedAt := recorder.now()
-	duration := completedAt.Sub(recorder.startedAt)
+	startedAt := recorder.startedAt
+	if startedAt.IsZero() {
+		startedAt = completedAt
+	}
+	finishedAt := recorder.finishedAt
+	if finishedAt.IsZero() {
+		finishedAt = completedAt
+	}
+	duration := finishedAt.Sub(startedAt)
 	if duration < 0 {
 		duration = 0
 	}
@@ -243,6 +253,24 @@ func (recorder *requestRecorder) setReasoning(config reasoning.Config) {
 		config.BudgetTokens = &budget
 	}
 	recorder.reasoning = config
+}
+
+// startTiming begins the request clock after a concrete credential has been
+// selected. Queueing, authentication and route discovery are not upstream
+// request latency and should not inflate the reported duration.
+func (recorder *requestRecorder) startTiming() {
+	if recorder == nil || recorder.timingStarted || recorder.now == nil {
+		return
+	}
+	recorder.startedAt = recorder.now()
+	recorder.timingStarted = true
+}
+
+func (recorder *requestRecorder) finishTiming() {
+	if recorder == nil || !recorder.finishedAt.IsZero() || recorder.now == nil {
+		return
+	}
+	recorder.finishedAt = recorder.now()
 }
 
 func (recorder *requestRecorder) recordFirstResponse() {
@@ -443,6 +471,7 @@ func (recorder *requestRecorder) completeReason(value reason) {
 	if recorder == nil {
 		return
 	}
+	recorder.finishTiming()
 	recorder.outcome = requestOutcome{
 		status: telemetry.RequestStatusError, statusCode: value.Status,
 		errorCode: value.Code, errorSummary: value.Message,
@@ -456,6 +485,10 @@ func (recorder *requestRecorder) completeStream(
 ) {
 	if recorder == nil {
 		return
+	}
+	recorder.finishTiming()
+	if !result.Committed {
+		recorder.firstResponseMs = nil
 	}
 	code := streamErrorCode(result.Stream.EndReason)
 	summary := result.Stream.ErrorSummary
@@ -497,6 +530,7 @@ func (recorder *requestRecorder) completeResponse(
 	if recorder == nil {
 		return
 	}
+	recorder.finishTiming()
 	if result.StatusCode >= 200 && result.StatusCode < 300 {
 		recorder.outcome = requestOutcome{
 			status:                telemetry.RequestStatusSuccess,
@@ -532,6 +566,8 @@ func (recorder *requestRecorder) completeProviderError(
 	if recorder == nil {
 		return
 	}
+	recorder.finishTiming()
+	recorder.firstResponseMs = nil
 	value := providerErrorReason(result)
 	summary := value.Message
 	if attemptIndex >= 0 && attemptIndex < len(recorder.attempts) && recorder.attempts[attemptIndex].ErrorSummary != "" {
@@ -652,6 +688,8 @@ func (recorder *requestRecorder) completeTransport(
 	if recorder == nil {
 		return
 	}
+	recorder.finishTiming()
+	recorder.firstResponseMs = nil
 	summary := value.Message
 	if attemptIndex >= 0 && attemptIndex < len(recorder.attempts) && recorder.attempts[attemptIndex].ErrorSummary != "" {
 		summary = recorder.attempts[attemptIndex].ErrorSummary
@@ -671,6 +709,8 @@ func (recorder *requestRecorder) completeCanceled(
 	if recorder == nil {
 		return
 	}
+	recorder.finishTiming()
+	recorder.firstResponseMs = nil
 	code := cancellationErrorCode(ctx)
 	upstreamModel := recorder.outcome.upstreamModel
 	if attemptIndex >= 0 && attemptIndex < len(recorder.attempts) {

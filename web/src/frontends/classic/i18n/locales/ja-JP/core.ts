@@ -250,6 +250,8 @@ export default {
       factGroups: '個のグループ',
       factAvailableCredentials: '個の認証情報が利用可能',
       factModels: '個のモデル',
+      factConcurrency: '実行中 / 上限',
+      unlimited: '無制限',
       updated: '更新',
       version: 'バージョン',
       updateAvailableLabel: '新しいバージョン {version} があります。リリースノートを開く',

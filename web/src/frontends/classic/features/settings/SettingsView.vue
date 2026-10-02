@@ -211,6 +211,8 @@ const invalidKeys = computed<RuntimeSettingKey[]>(() => {
       return !isValidAffinityCapacity(current.values.affinity_capacity)
     if (key === 'retry_count' || key === 'blacklist_threshold')
       return !isValidNonNegativeInteger(current.values[key])
+    if (key === 'global_concurrency_limit')
+      return !isValidNonNegativeInteger(current.values.global_concurrency_limit)
     return false
   })
 })

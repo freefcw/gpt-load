@@ -182,7 +182,7 @@ function numberInvalid(key: RuntimeNumber): boolean {
     Boolean(value) &&
     (!/^\d+$/u.test(value) ||
       !Number.isSafeInteger(Number(value)) ||
-      Number(value) < (key === 'blacklist_threshold' ? 0 : 1))
+      Number(value) < (key === 'blacklist_threshold' || key === 'concurrency_limit' ? 0 : 1))
   )
 }
 const proxyChanged = computed(

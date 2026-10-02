@@ -69,6 +69,8 @@ export default {
       toggleFailed: '切り替えに失敗しました。再試行してください。',
       appendCredential: '認証情報を追加',
       appendCredentialFor: '{name} に認証情報を追加',
+      concurrency: '同時実行数 {current} / {limit}',
+      unlimited: '無制限',
     },
   },
   group: {
@@ -341,6 +343,9 @@ export default {
       runtime: {
         title: 'ランタイム上書き',
         description: '継承値はグローバル設定に従い、グループ上書きは疎なまま保持されます。',
+        concurrency_limit: 'グループ同時実行数の上限',
+        concurrencyHelp:
+          '0 は無制限です。このグループを通過して実行中の上流リクエストに適用されます。',
         first_byte_timeout: 'ネイティブ応答 / ストリーム初回イベントのタイムアウト',
         request_timeout: '上流リクエスト1回あたりのタイムアウト',
         stream_idle_timeout: 'ストリームアイドルタイムアウト',

@@ -47,6 +47,17 @@ const updatedTitle = computed(() =>
           <strong>{{ formatInteger(base.inventory.model_count, locale) }}</strong>
           <span>{{ t('home.ledger.factModels') }}</span>
         </span>
+        <span class="home-summary__separator" aria-hidden="true"> · </span>
+        <span class="home-summary__fact">
+          <strong>
+            {{ formatInteger(base.concurrency.current, locale) }}/{{
+              base.concurrency.limit === 0
+                ? t('home.ledger.unlimited')
+                : formatInteger(base.concurrency.limit, locale)
+            }}
+          </strong>
+          <span>{{ t('home.ledger.factConcurrency') }}</span>
+        </span>
       </h1>
     </div>
     <dl class="home-summary__stamp">

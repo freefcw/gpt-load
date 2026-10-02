@@ -69,6 +69,8 @@ export default {
       toggleFailed: 'Could not change the switch. Try again.',
       appendCredential: 'Add credential',
       appendCredentialFor: 'Add a credential to {name}',
+      concurrency: 'Concurrency {current} / {limit}',
+      unlimited: 'Unlimited',
     },
   },
   group: {
@@ -341,6 +343,9 @@ export default {
       runtime: {
         title: 'Runtime overrides',
         description: 'Inherited values follow global settings. Group overrides remain sparse.',
+        concurrency_limit: 'Group concurrency limit',
+        concurrencyHelp:
+          '0 means unlimited. The limit applies to upstream work running through this Group.',
         first_byte_timeout: 'Native response / stream first-event timeout',
         request_timeout: 'Upstream request timeout per attempt',
         stream_idle_timeout: 'Stream-idle timeout',

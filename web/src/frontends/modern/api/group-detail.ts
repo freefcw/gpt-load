@@ -5,6 +5,7 @@ import { boolean, integer, list, oneOf, record, text } from './response'
 import { readModelCandidates } from './model-discovery'
 import type { ProxyOverride } from './group-create'
 import { sortProtocols } from '@modern/i18n/protocols'
+import { readConcurrency, type ConcurrencyView } from '@shared/concurrency'
 import { readObservation, type CredentialObservation } from './credential-observation'
 import { readGroupBasics, type GroupBasics } from './groups'
 
@@ -34,6 +35,7 @@ export interface CredentialFilters {
   reset: '' | 'available' | 'none' | 'unknown'
 }
 export const runtimeNumbers = [
+  'concurrency_limit',
   'first_byte_timeout',
   'request_timeout',
   'stream_idle_timeout',
@@ -63,6 +65,7 @@ export type RuntimeSettings = Partial<
   parameter_overrides?: ParameterRule[]
 }
 export interface GroupSettings extends GroupBasics {
+  concurrency: ConcurrencyView
   channelID: string
   params: Record<string, string>
   validationModel: string | null
@@ -121,6 +124,7 @@ function readSettings(value: unknown): GroupSettings {
     throw new InvalidResponseError()
   return {
     ...readGroupBasics(data),
+    concurrency: readConcurrency(data.concurrency),
     channelID: text(data.channel_id),
     params: stringMap(data.params),
     validationModel: data.validation_model === null ? null : text(data.validation_model),

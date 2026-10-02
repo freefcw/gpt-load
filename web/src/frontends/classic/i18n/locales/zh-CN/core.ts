@@ -239,6 +239,8 @@ export default {
       factGroups: '个分组',
       factAvailableCredentials: '个凭据可用',
       factModels: '个模型',
+      factConcurrency: '并发中 / 上限',
+      unlimited: '不限',
       updated: '更新',
       version: '版本',
       updateAvailableLabel: '发现新版本 {version}，点击查看发布说明',

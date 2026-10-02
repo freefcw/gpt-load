@@ -38,6 +38,15 @@ const facts = computed<Fact[]>(() => [
           value: compact(props.base.keys.length),
           to: { name: 'modern-access-keys' } as RouteLocationRaw,
         },
+        {
+          key: 'concurrency',
+          value:
+            compact(props.base.concurrency.current) +
+            ' / ' +
+            (props.base.concurrency.limit === 0
+              ? t('home.unlimited')
+              : compact(props.base.concurrency.limit)),
+        },
       ]
     : []),
 ])

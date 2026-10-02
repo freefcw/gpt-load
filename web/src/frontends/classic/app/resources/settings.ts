@@ -42,6 +42,7 @@ import {
 } from './auto-model'
 
 export const runtimeSettingKeys = [
+  'global_concurrency_limit',
   'codex_live_mode',
   'route_strategy',
   'first_byte_timeout',
@@ -70,6 +71,7 @@ export type RuntimeSettingKey = (typeof runtimeSettingKeys)[number]
 export type TimeoutSettingKey = Exclude<
   RuntimeSettingKey,
   | 'codex_live_mode'
+  | 'global_concurrency_limit'
   | 'route_strategy'
   | 'retry_count'
   | 'blacklist_threshold'
@@ -100,6 +102,7 @@ export interface CORSConfigDto {
 }
 
 export interface SettingsValues {
+  global_concurrency_limit: number
   request_redaction: RedactionRule[]
   jev: JevConfig
   request_audit: AuditConfig
@@ -137,6 +140,7 @@ export interface SettingsDto {
 }
 
 export type SettingsPatch = Partial<{
+  global_concurrency_limit: number | null
   auto_model: AutoModelConfigDto | null
   jev: JevConfig | null
   request_redaction: RedactionRule[] | null
@@ -265,6 +269,7 @@ export function projectSettings(value: unknown): SettingsDto {
       request_audit: readAudit(values.request_audit),
       request_redaction: readRedactionRules(values.request_redaction),
       codex_live_mode: projectEnum(values.codex_live_mode, codexLiveModes),
+      global_concurrency_limit: projectSafeInteger(values.global_concurrency_limit, { minimum: 0 }),
       route_strategy: projectEnum(values.route_strategy, routeStrategies),
       first_byte_timeout: projectSafeInteger(values.first_byte_timeout, { minimum: 1 }),
       request_timeout: projectSafeInteger(values.request_timeout, { minimum: 1 }),

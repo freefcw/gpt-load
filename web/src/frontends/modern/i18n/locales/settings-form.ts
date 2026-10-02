@@ -28,6 +28,7 @@ export const zhCN = {
   times: '次',
   entries: '条',
   days: '天',
+  requests: '个请求',
   sections: {
     redaction: '请求脱敏',
     routing: '路由调度',
@@ -50,6 +51,7 @@ export const zhCN = {
   },
   liveModes: { off: '关闭', direct: '直连上游', relay: '网关中继' },
   fields: {
+    global_concurrency_limit: '全局并发上限',
     codex_live_mode: '实时语音',
     request_redaction: '请求脱敏',
     jev: 'JEV 公共配置',
@@ -75,6 +77,7 @@ export const zhCN = {
     cors: '跨域访问（CORS）',
   },
   hints: {
+    global_concurrency_limit: '0 表示不限；达到上限的新数据面请求会立即返回并发超限。',
     codex_live_mode:
       '分组可覆盖此默认值。直连要求客户端能访问上游；中继需要配置公网媒体地址及 UDP 端口。关闭仅停用语音。',
     request_redaction: '配置发送给上游与 JEV 的文本脱敏规则',
@@ -103,6 +106,7 @@ export const zhCN = {
     cors: '仅作用于 /v1 和 /v1beta，管理 API 不开放跨域访问。',
   },
   strategies: { native_first: '原生优先', weighted_mix: '混合权重' },
+  concurrency: '并发控制',
   timeouts: '请求超时',
   reliability: '重试与凭据健康',
   proxy: {
@@ -202,6 +206,7 @@ export const enUS = {
   times: 'times',
   entries: 'entries',
   days: 'days',
+  requests: 'requests',
   sections: {
     redaction: 'Request redaction',
     routing: 'Routing',
@@ -224,6 +229,7 @@ export const enUS = {
   },
   liveModes: { off: 'Off', direct: 'Direct to upstream', relay: 'Gateway relay' },
   fields: {
+    global_concurrency_limit: 'Global concurrency limit',
     codex_live_mode: 'Live voice',
     request_redaction: 'Request redaction',
     jev: 'Shared JEV configuration',
@@ -249,6 +255,8 @@ export const enUS = {
     cors: 'Cross-origin access (CORS)',
   },
   hints: {
+    global_concurrency_limit:
+      '0 means unlimited; new data-plane requests are rejected immediately when the limit is full.',
     codex_live_mode:
       'Groups can override this default. Direct mode requires client access to upstream media. Relay mode requires a reachable media IP and UDP ports. Off disables voice only.',
     request_redaction: 'Configure text redaction for upstream providers and JEV',
@@ -281,6 +289,7 @@ export const enUS = {
     cors: 'Applies only to /v1 and /v1beta. Management APIs do not allow cross-origin access.',
   },
   strategies: { native_first: 'Native first', weighted_mix: 'Weighted mix' },
+  concurrency: 'Concurrency',
   timeouts: 'Request timeouts',
   reliability: 'Retries & credential health',
   proxy: {
@@ -382,6 +391,7 @@ export const jaJP = {
   times: '回',
   entries: '件',
   days: '日',
+  requests: 'リクエスト',
   sections: {
     redaction: 'リクエストのマスキング',
     routing: 'ルーティング',
@@ -404,6 +414,7 @@ export const jaJP = {
   },
   liveModes: { off: '無効', direct: '上流に直接接続', relay: 'ゲートウェイ中継' },
   fields: {
+    global_concurrency_limit: 'グローバル同時実行数の上限',
     codex_live_mode: 'リアルタイム音声',
     request_redaction: 'リクエストのマスキング',
     jev: 'JEV 共通設定',
@@ -429,6 +440,8 @@ export const jaJP = {
     cors: 'クロスオリジンアクセス（CORS）',
   },
   hints: {
+    global_concurrency_limit:
+      '0 は無制限です。上限到達時、新しいデータプレーン要求は直ちに拒否されます。',
     codex_live_mode:
       'グループで既定値を上書きできます。直接接続はクライアントから上流への通信が必要です。中継には到達可能なメディア IP と UDP ポートが必要です。無効にしてもテキストは利用できます。',
     request_redaction: '上流と JEV に送信するテキストのマスキングルールを設定',
@@ -460,6 +473,7 @@ export const jaJP = {
     cors: '/v1 と /v1beta のみに適用します。管理 API はクロスオリジンアクセスを許可しません。',
   },
   strategies: { native_first: 'ネイティブ優先', weighted_mix: '重み付き混合' },
+  concurrency: '同時実行数',
   timeouts: 'リクエストのタイムアウト',
   reliability: 'リトライと認証情報の健全性',
   proxy: {

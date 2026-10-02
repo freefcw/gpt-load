@@ -86,6 +86,9 @@ export default {
       liveModeHelp:
         'Groups can override this default. Direct mode requires client access to upstream media. Relay mode requires a reachable media IP and UDP ports. Off disables voice only.',
       responses_websocket_enabled: 'Responses WebSocket',
+      global_concurrency_limit: 'Global concurrency limit',
+      concurrencyHelp:
+        '0 means unlimited; new data-plane requests are rejected immediately when the limit is full.',
       websocketHelp:
         'Groups can override this setting. Disabling closes affected WS connections and interrupts generation immediately; HTTP/SSE remains available.',
       first_byte_timeout: 'Native response / stream first-event timeout',

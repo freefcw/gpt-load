@@ -10,6 +10,7 @@ import type {
   CredentialCounts,
   GroupCollectionFilters,
   GroupCollectionItemDto,
+  ConcurrencyViewDto,
   GroupCollectionPaginationDto,
   GroupCollectionResponseDto,
   GroupCollectionStatus,
@@ -60,6 +61,7 @@ const groupSummaryFields = [
   'model_count',
 ] as const
 const groupSettingsFields = [
+  'concurrency',
   'name',
   'price_multiplier',
   'channel_id',
@@ -87,6 +89,7 @@ const groupModelItemFields = [
 const groupCollectionFields = ['observed_at_ms', 'summary', 'items', 'pagination'] as const
 const groupCollectionSummaryFields = ['total', 'available', 'unavailable', 'disabled'] as const
 const groupCollectionItemFields = [
+  'concurrency',
   'id',
   'name',
   'price_multiplier',
@@ -120,6 +123,7 @@ const groupCollectionStatuses = ['available', 'unavailable', 'disabled'] as cons
 const groupUnavailableReasons = ['no_available_credentials', 'no_models'] as const
 const connectionTypes = ['api_key', 'subscription'] as const
 const runtimeSettingFields = [
+  'concurrency_limit',
   'first_byte_timeout',
   'request_timeout',
   'stream_idle_timeout',
@@ -138,6 +142,7 @@ export interface HeaderRulesDto {
 }
 
 export interface GroupRuntimeConfigDto {
+  concurrency_limit?: number
   first_byte_timeout?: number
   request_timeout?: number
   stream_idle_timeout?: number
@@ -151,6 +156,7 @@ export interface GroupRuntimeConfigDto {
 }
 
 export interface GroupEffectiveConfigDto {
+  concurrency_limit: number
   first_byte_timeout: number
   request_timeout: number
   stream_idle_timeout: number
@@ -373,6 +379,9 @@ function projectRuntimeConfig(
   assertNoSecretLikeFields(record, complete ? runtimeSettingFields : groupRuntimeSettingFields)
   const result: GroupRuntimeConfigDto = {}
 
+  if (complete || Object.prototype.hasOwnProperty.call(record, 'concurrency_limit')) {
+    result.concurrency_limit = projectSafeInteger(record.concurrency_limit, { minimum: 0 })
+  }
   for (const field of ['first_byte_timeout', 'request_timeout', 'stream_idle_timeout'] as const) {
     if (complete || Object.prototype.hasOwnProperty.call(record, field)) {
       result[field] = projectSafeInteger(record[field], { minimum: 1 })
@@ -434,6 +443,7 @@ export function projectGroupSettings(value: unknown): GroupSettingsDto {
   const record = projectRecord(value)
   assertNoSecretLikeFields(record, groupSettingsFields)
   return {
+    concurrency: projectConcurrency(record.concurrency),
     name: projectNonBlankString(record.name),
     channel_id: projectChannelID(record.channel_id),
     connection_type: projectEnum(record.connection_type, connectionTypes),
@@ -545,6 +555,7 @@ function projectGroupCollectionItem(value: unknown): GroupCollectionItemDto {
     throw new InvalidResponseError()
   }
   return {
+    concurrency: projectConcurrency(record.concurrency),
     id: projectSafeInteger(record.id, { minimum: 1 }),
     name: projectNonBlankString(record.name),
     channel_id: projectChannelID(record.channel_id),
@@ -554,6 +565,14 @@ function projectGroupCollectionItem(value: unknown): GroupCollectionItemDto {
     price_multiplier: projectPriceMultiplier(record.price_multiplier),
     model_count: modelCount,
     credential_counts: credentialCounts,
+  }
+}
+
+function projectConcurrency(value: unknown): ConcurrencyViewDto {
+  const record = projectRecord(value)
+  return {
+    current: projectSafeInteger(record.current, { minimum: 0 }),
+    limit: projectSafeInteger(record.limit, { minimum: 0 }),
   }
 }
 

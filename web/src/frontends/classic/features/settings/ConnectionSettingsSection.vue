@@ -20,6 +20,7 @@ import { formatInteger } from '@/lib/format'
 import SettingRow from '@/components/config/SettingRow.vue'
 import {
   createSettingsDraft,
+  isValidNonNegativeInteger,
   isValidTimeout,
   setSettingsOverride,
   type SettingsDraft,
@@ -47,6 +48,23 @@ function setLiveMode(value: string): void {
   const draft = cloneDraft()
   draft.values.codex_live_mode = value as CodexLiveMode
   publish('codex_live_mode', draft)
+}
+function concurrencyValue(): string {
+  if (isPendingRestore('global_concurrency_limit')) return t('settings.runtime.resetPending')
+  return t('settings.runtime.effectiveCount', {
+    value: formatInteger(props.base.settings.values.global_concurrency_limit, locale.value),
+  })
+}
+function setConcurrencyValue(value: string): void {
+  const draft = cloneDraft()
+  draft.values.global_concurrency_limit = value.trim() === '' ? Number.NaN : Number(value)
+  publish('global_concurrency_limit', draft)
+}
+function concurrencyError(): string | undefined {
+  return hasOverride('global_concurrency_limit') &&
+    !isValidNonNegativeInteger(props.draft.values.global_concurrency_limit)
+    ? t('settings.runtime.nonNegativeIntegerError')
+    : undefined
 }
 const timeoutKeys: TimeoutSettingKey[] = [
   'first_byte_timeout',
@@ -158,6 +176,40 @@ function timeoutError(key: TimeoutSettingKey): string | undefined {
     </header>
 
     <div class="settings-connection__rows">
+      <SettingRow
+        :label="t('settings.runtime.global_concurrency_limit')"
+        :value="concurrencyValue()"
+        :help="t('settings.runtime.concurrencyHelp')"
+        :source-label="sourceLabel('global_concurrency_limit')"
+        :action-label="actionLabel('global_concurrency_limit')"
+        :overridden="hasOverride('global_concurrency_limit')"
+        :pending-restore="isPendingRestore('global_concurrency_limit')"
+        :disabled="disabled"
+        @toggle="toggleOverride('global_concurrency_limit')"
+      >
+        <template #control>
+          <CompactFieldError
+            id="settings-value-global_concurrency_limit"
+            :error="concurrencyError()"
+          >
+            <template #default="{ invalid, describedBy }">
+              <AppTextInput
+                id="settings-value-global_concurrency_limit"
+                type="number"
+                min="0"
+                step="1"
+                inputmode="numeric"
+                :model-value="String(draft.values.global_concurrency_limit)"
+                :label="t('settings.runtime.global_concurrency_limit')"
+                :disabled="disabled"
+                :invalid="invalid"
+                :described-by="describedBy"
+                @update:model-value="setConcurrencyValue"
+              />
+            </template>
+          </CompactFieldError>
+        </template>
+      </SettingRow>
       <SettingRow
         :label="t('settings.runtime.codex_live_mode')"
         :value="

@@ -56,11 +56,13 @@ import GroupSettingsBaseForm from './GroupSettingsBaseForm.vue'
 import {
   buildGroupSettingsPatch,
   createGroupSettingsDraft,
+  groupLimitKeys,
   groupPolicyCountKeys,
   groupTimeoutKeys,
   setGroupConfigOverride,
   setGroupPolicyCountOverride,
   type GroupSettingsDraft,
+  type GroupLimitKey,
   type GroupPolicyCountKey,
   type GroupTimeoutKey,
 } from './group-settings-patch'
@@ -107,6 +109,7 @@ const {
   show: showSavedFeedback,
 } = useTransientFlag(1_600)
 const timeoutKeys = groupTimeoutKeys
+const limitKeys = groupLimitKeys
 const policyCountKeys = groupPolicyCountKeys
 const policyRows = [
   {
@@ -229,6 +232,12 @@ const timeoutValid = computed(() =>
     return value === undefined || (Number.isSafeInteger(value) && value > 0)
   }),
 )
+const limitValid = computed(() =>
+  limitKeys.every((key) => {
+    const value = draft.value?.overrides[key]
+    return value === undefined || (Number.isSafeInteger(value) && value >= 0)
+  }),
+)
 const policyCountsValid = computed(() =>
   policyCountKeys.every((key) => {
     const value = draft.value?.overrides[key]
@@ -242,12 +251,13 @@ const valid = computed(
     weightValid.value &&
     isValidPriceMultiplier(draft.value?.price_multiplier ?? '') &&
     timeoutValid.value &&
+    limitValid.value &&
     policyCountsValid.value &&
     headerRulesValid.value &&
     parameterOverridesValid.value &&
     !proxyState.value.invalid,
 )
-function isPendingRestore(key: GroupTimeoutKey | GroupPolicyCountKey): boolean {
+function isPendingRestore(key: GroupTimeoutKey | GroupLimitKey | GroupPolicyCountKey): boolean {
   return draft.value?.overrides[key] === undefined && saved.value?.overrides[key] !== undefined
 }
 const headerRulesOverridden = computed(() => draft.value?.overrides.header_rules !== undefined)
@@ -403,6 +413,26 @@ function setTimeoutValue(key: GroupTimeoutKey, value: string): void {
     [key]: Number(value),
   }
   draft.value = { ...draft.value, overrides }
+}
+
+function setLimitOverride(key: GroupLimitKey, enabled: boolean): void {
+  if (!draft.value || !saved.value) return
+  draft.value = setGroupConfigOverride(draft.value, key, enabled, saved.value.effective[key])
+}
+
+function setLimitValue(key: GroupLimitKey, value: string): void {
+  if (!draft.value) return
+  draft.value = {
+    ...draft.value,
+    overrides: { ...draft.value.overrides, [key]: Number(value) },
+  }
+}
+
+function limitError(key: GroupLimitKey): string | undefined {
+  const value = draft.value?.overrides[key]
+  return value !== undefined && (!Number.isSafeInteger(value) || value < 0)
+    ? t('group.settings.runtime.nonNegativeIntegerError')
+    : undefined
 }
 
 function setPolicyCountOverride(key: GroupPolicyCountKey, enabled: boolean): void {
@@ -877,6 +907,59 @@ onBeforeUnmount(() => {
                     @update:mode="proxyMode = $event"
                     @update:endpoint="proxyEndpoint = $event"
                   />
+                </template>
+              </SettingRow>
+              <SettingRow
+                v-for="key in limitKeys"
+                :key="key"
+                :label="t(`group.settings.runtime.${key}`)"
+                :value="
+                  isPendingRestore(key)
+                    ? t('group.settings.runtime.resetPending')
+                    : t('group.settings.runtime.effectiveCount', { value: saved.effective[key] })
+                "
+                :help="t('group.settings.runtime.concurrencyHelp')"
+                :source-label="
+                  draft.overrides[key] !== undefined
+                    ? t('group.settings.runtime.override')
+                    : isPendingRestore(key)
+                      ? t('group.settings.runtime.pendingRestoreSource')
+                      : t('group.settings.runtime.inherited')
+                "
+                :action-label="
+                  draft.overrides[key] === undefined
+                    ? t('group.settings.runtime.useOverride')
+                    : t('group.settings.runtime.useInherited')
+                "
+                :overridden="draft.overrides[key] !== undefined"
+                :pending-restore="isPendingRestore(key)"
+                :disabled="mutationPending"
+                @toggle="setLimitOverride(key, draft.overrides[key] === undefined)"
+              >
+                <template #control>
+                  <div class="group-settings__runtime-input">
+                    <CompactFieldError :id="`group-settings-value-${key}`" :error="limitError(key)">
+                      <template #default="{ invalid, describedBy }">
+                        <AppTextInput
+                          type="number"
+                          min="0"
+                          :model-value="String(draft.overrides[key])"
+                          :label="
+                            t(`group.settings.runtime.valueFor`, {
+                              field: t(`group.settings.runtime.${key}`),
+                            })
+                          "
+                          appearance="surface"
+                          size="compact"
+                          monospace
+                          :disabled="mutationPending"
+                          :invalid="invalid"
+                          :described-by="describedBy"
+                          @update:model-value="setLimitValue(key, $event)"
+                        />
+                      </template>
+                    </CompactFieldError>
+                  </div>
                 </template>
               </SettingRow>
               <SettingRow

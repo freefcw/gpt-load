@@ -251,6 +251,8 @@ export default {
       factGroups: 'Groups',
       factAvailableCredentials: 'credentials available',
       factModels: 'models',
+      factConcurrency: 'in flight / limit',
+      unlimited: 'unlimited',
       updated: 'Updated',
       version: 'Version',
       updateAvailableLabel: 'Version {version} is available; open the release notes',

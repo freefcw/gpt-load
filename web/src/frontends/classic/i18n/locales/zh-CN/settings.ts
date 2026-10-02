@@ -77,6 +77,8 @@ export default {
       liveModeHelp:
         '分组可覆盖此默认值。直连要求客户端能访问上游；中继需要配置公网媒体地址及 UDP 端口。关闭仅停用语音。',
       responses_websocket_enabled: 'Responses WebSocket',
+      global_concurrency_limit: '全局并发上限',
+      concurrencyHelp: '0 表示不限；达到上限的新数据面请求会立即返回并发超限。',
       websocketHelp:
         '分组可覆盖此开关；关闭会立即断开受影响的 WS 连接并中断生成，HTTP/SSE 不受影响。',
       first_byte_timeout: '原生响应 / 流式首事件超时',

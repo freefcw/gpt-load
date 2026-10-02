@@ -6,6 +6,7 @@ import type {
   AccessKeyCollectionItemDto,
   AccessProtocol,
   CredentialItemDto,
+  ConcurrencyViewDto,
 } from '@/api/control/types'
 import { knownAccessProtocols } from '@/api/control/protocols'
 import { InvalidResponseError } from '@shared/http/errors'
@@ -34,6 +35,7 @@ export interface HomeBaseDto {
   server_now_ms: number
   started_at_ms: number
   version: string
+  concurrency: ConcurrencyViewDto
   inventory: {
     group_count: number
     credential_count: number
@@ -136,6 +138,7 @@ const homeBaseFields = [
   'server_now_ms',
   'started_at_ms',
   'version',
+  'concurrency',
   'inventory',
   'access_keys',
   'current_access_key',
@@ -270,12 +273,21 @@ export function projectHomeBase(value: unknown): HomeBaseDto {
     server_now_ms: serverNowMS,
     started_at_ms: startedAtMS,
     version: projectNonBlankTrimmedString(record.version),
+    concurrency: projectConcurrency(record.concurrency),
     inventory: projectHomeInventory(record.inventory),
     access_keys: accessKeys,
     current_access_key:
       record.current_access_key === null
         ? null
         : projectAccessKeyCollectionItem(record.current_access_key),
+  }
+}
+
+function projectConcurrency(value: unknown): ConcurrencyViewDto {
+  const record = projectRecord(value)
+  return {
+    current: projectSafeInteger(record.current, { minimum: 0 }),
+    limit: projectSafeInteger(record.limit, { minimum: 0 }),
   }
 }
 

@@ -543,6 +543,17 @@ function connectionTypeBadgeClass(type: ConnectionType): string {
                     <UserRound v-else :size="10" aria-hidden="true" />
                     {{ connectionTypeLabel(group.connection_type) }}
                   </span>
+                  <span class="connection-type-badge">
+                    {{
+                      t('groups.collection.concurrency', {
+                        current: group.concurrency.current,
+                        limit:
+                          group.concurrency.limit === 0
+                            ? t('groups.collection.unlimited')
+                            : group.concurrency.limit,
+                      })
+                    }}
+                  </span>
                 </span>
                 <CopyChip
                   v-if="group.params.base_url"

@@ -37,6 +37,11 @@ export interface ProxyViewDto {
 export type ProxyConfigInput = { mode: 'direct' } | { mode: 'custom'; url: string }
 export type ProxyMutation = ProxyConfigInput | null
 
+export interface ConcurrencyViewDto {
+  current: number
+  limit: number
+}
+
 export interface GroupCollectionFilters {
   q?: string
   status?: GroupCollectionStatus
@@ -54,6 +59,7 @@ export interface GroupCollectionSummaryDto {
 }
 
 export interface GroupCollectionItemDto {
+  concurrency: ConcurrencyViewDto
   id: number
   name: string
   price_multiplier: string
@@ -112,6 +118,7 @@ export interface ParameterOverrideRuleDto {
 }
 
 export interface GroupRuntimeConfigDto {
+  concurrency_limit?: number
   first_byte_timeout?: number
   request_timeout?: number
   stream_idle_timeout?: number
@@ -125,6 +132,7 @@ export interface GroupRuntimeConfigDto {
 }
 
 export interface GroupEffectiveConfigDto {
+  concurrency_limit: number
   first_byte_timeout: number
   request_timeout: number
   stream_idle_timeout: number
@@ -137,6 +145,7 @@ export interface GroupEffectiveConfigDto {
 }
 
 export interface GroupSettingsDto {
+  concurrency: ConcurrencyViewDto
   name: string
   price_multiplier: string
   channel_id: string

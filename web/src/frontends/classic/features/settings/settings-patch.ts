@@ -31,6 +31,7 @@ export interface SettingsDraft {
 }
 
 const requestForwardingKeys: RuntimeSettingKey[] = [
+  'global_concurrency_limit',
   'codex_live_mode',
   'responses_websocket_enabled',
   'route_strategy',
@@ -406,6 +407,8 @@ export function validateSettingsSection(draft: SettingsDraft, section: SettingsS
     timeouts.every((key) => !draft.overrides.has(key) || isValidTimeout(draft.values[key])) &&
     policyCounts.every(
       (key) => !draft.overrides.has(key) || isValidNonNegativeInteger(draft.values[key]),
-    )
+    ) &&
+    (!draft.overrides.has('global_concurrency_limit') ||
+      isValidNonNegativeInteger(draft.values.global_concurrency_limit))
   )
 }

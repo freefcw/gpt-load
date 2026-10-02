@@ -79,6 +79,8 @@ export default {
       liveModeHelp:
         'グループで既定値を上書きできます。直接接続はクライアントから上流への通信が必要です。中継には到達可能なメディア IP と UDP ポートが必要です。無効にしてもテキストは利用できます。',
       responses_websocket_enabled: 'Responses WebSocket',
+      global_concurrency_limit: 'グローバル同時実行数の上限',
+      concurrencyHelp: '0 は無制限です。上限到達時、新しいデータプレーン要求は直ちに拒否されます。',
       websocketHelp:
         'グループで上書きできます。無効化すると対象の WS 接続と生成を直ちに終了します。HTTP/SSE は影響を受けません。',
       first_byte_timeout: 'ネイティブ応答 / ストリーム初回イベントのタイムアウト',

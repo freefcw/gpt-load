@@ -18,6 +18,7 @@ import { readAutoModel, readAutoEntry, type AutoModelConfig, type AutoEntry } fr
 
 export const settingsKey = ['modern', 'settings'] as const
 export const settingNumbers = {
+  global_concurrency_limit: { min: 0, max: Number.MAX_SAFE_INTEGER, unit: 'requests' },
   first_byte_timeout: { min: 1, max: 9_223_372_036, unit: 'seconds' },
   request_timeout: { min: 1, max: 9_223_372_036, unit: 'seconds' },
   stream_idle_timeout: { min: 1, max: 9_223_372_036, unit: 'seconds' },

@@ -69,6 +69,8 @@ export default {
       toggleFailed: '切换失败，请重试',
       appendCredential: '追加凭据',
       appendCredentialFor: '向 {name} 追加凭据',
+      concurrency: '并发 {current} / {limit}',
+      unlimited: '不限',
     },
   },
   group: {
@@ -330,6 +332,8 @@ export default {
       runtime: {
         title: '运行时覆盖',
         description: '每行只表达来源、当前值与一个切换动作。',
+        concurrency_limit: '分组并发上限',
+        concurrencyHelp: '0 表示不限；限制作用于正在通过该分组执行的上游请求。',
         first_byte_timeout: '原生响应 / 流式首事件超时',
         request_timeout: '单次上游请求超时',
         stream_idle_timeout: '流空闲超时',

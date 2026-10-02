@@ -3,6 +3,7 @@ import { readAccessKeyRow, type AccessKeyRow } from './access-keys'
 import { readCredential, type CredentialRow } from './group-detail'
 import { readCredentialFilterKey } from './groups'
 import { integer, list, record, text } from './response'
+import { readConcurrency, type ConcurrencyView } from '@shared/concurrency'
 
 export interface HomeKey {
   id: number
@@ -10,6 +11,7 @@ export interface HomeKey {
   mask: string
 }
 export interface HomeBase {
+  concurrency: ConcurrencyView
   observedAt: number
   startedAt: number
   version: string
@@ -35,6 +37,7 @@ export async function getHome(client: ApiClient, signal: AbortSignal): Promise<H
   const data = record(await client.request('/api/home', { signal }))
   const inventory = record(data.inventory)
   return {
+    concurrency: readConcurrency(data.concurrency),
     observedAt: integer(data.server_now_ms),
     startedAt: integer(data.started_at_ms),
     version: text(data.version),

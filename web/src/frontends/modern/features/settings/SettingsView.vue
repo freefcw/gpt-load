@@ -99,6 +99,7 @@ type SectionID = (typeof sectionIDs)[number]
 const sectionFields: Record<SectionID, readonly SettingKey[]> = {
   routing: ['route_strategy', 'affinity_enabled', 'affinity_ttl', 'affinity_capacity'],
   connection: [
+    'global_concurrency_limit',
     'proxy_config',
     'codex_live_mode',
     'responses_websocket_enabled',
@@ -132,6 +133,7 @@ const timeouts: readonly SettingNumber[] = [
   'request_timeout',
   'stream_idle_timeout',
 ]
+const concurrencyNumbers: readonly SettingNumber[] = ['global_concurrency_limit']
 const reliability: readonly SettingNumber[] = [
   'retry_count',
   'blacklist_threshold',
@@ -597,6 +599,24 @@ onScopeDispose(() => {
                   </div>
                 </template>
               </SettingItem>
+              <div
+                v-if="concurrencyNumbers.some(matches)"
+                class="modern-settings-block modern-settings-group"
+              >
+                <h3 class="modern-settings-group-title">{{ t('settingsForm.concurrency') }}</h3>
+                <div class="modern-settings-number-grid">
+                  <SettingsNumberField
+                    v-for="key in concurrencyNumbers.filter(matches)"
+                    :key="key"
+                    v-model="draft[key]"
+                    :setting="key"
+                    v-bind="settingState(key)"
+                    :error="fieldErrors[key]"
+                    @reset="restore(key)"
+                    @undo="undoRestore(key)"
+                  />
+                </div>
+              </div>
               <div
                 v-if="timeouts.some(matches)"
                 class="modern-settings-block modern-settings-group"

@@ -12,6 +12,7 @@ import type {
 import { normalizePriceMultiplier } from '@/lib/price-multiplier'
 
 export type GroupTimeoutKey = 'first_byte_timeout' | 'request_timeout' | 'stream_idle_timeout'
+export type GroupLimitKey = 'concurrency_limit'
 export type GroupPolicyCountKey = 'blacklist_threshold'
 
 export interface GroupSettingsDraft {
@@ -34,6 +35,7 @@ export const groupTimeoutKeys: readonly GroupTimeoutKey[] = [
   'request_timeout',
   'stream_idle_timeout',
 ]
+export const groupLimitKeys: readonly GroupLimitKey[] = ['concurrency_limit']
 export const groupPolicyCountKeys: readonly GroupPolicyCountKey[] = ['blacklist_threshold']
 
 function cloneHeaders(value: HeaderRulesDto): HeaderRulesDto {
@@ -73,6 +75,7 @@ function cloneParameterOverrides(value: ParameterOverrideRuleDto[]): ParameterOv
 
 function cloneOverrides(value: GroupRuntimeConfigDto): GroupRuntimeConfigDto {
   const next: GroupRuntimeConfigDto = {}
+  for (const key of groupLimitKeys) if (value[key] !== undefined) next[key] = value[key]
   for (const key of groupTimeoutKeys) if (value[key] !== undefined) next[key] = value[key]
   for (const key of groupPolicyCountKeys) if (value[key] !== undefined) next[key] = value[key]
   if (value.header_rules) next.header_rules = cloneHeaders(value.header_rules)
@@ -149,7 +152,7 @@ export function createGroupSettingsDraft(group: GroupSettingsDto): GroupSettings
 
 export function setGroupConfigOverride(
   draft: GroupSettingsDraft,
-  key: GroupTimeoutKey,
+  key: GroupTimeoutKey | GroupLimitKey,
   enabled: boolean,
   effective: number,
 ): GroupSettingsDraft {

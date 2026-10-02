@@ -300,7 +300,7 @@ func queryCompileRows(ctx context.Context, db *gorm.DB) (compileRows, error) {
 		return compileRows{}, fmt.Errorf("query groups: %w", err)
 	}
 	if err := db.
-		Select("id", "group_id", "fingerprint", "identity_fingerprint", "secret_version", "status", "weight_manual").
+		Select("id", "name", "group_id", "fingerprint", "identity_fingerprint", "secret_version", "status", "weight_manual").
 		Order("id ASC").
 		Find(&rows.credentials).Error; err != nil {
 		return compileRows{}, fmt.Errorf("query credential metadata: %w", err)
@@ -923,7 +923,7 @@ func mapCredentials(rows []models.Credential, groups []models.Group) []state.Cre
 	for _, row := range rows {
 		target := targets[row.GroupID]
 		result = append(result, state.CredentialEntry{
-			ID: row.ID, GroupID: row.GroupID,
+			Name: row.Name, ID: row.ID, GroupID: row.GroupID,
 			Version: credentialVersion(row.SecretVersion),
 			IdentityGeneration: CredentialIdentityGeneration(
 				row.IdentityFingerprint,

@@ -293,6 +293,7 @@ export interface ModelCooldownDto {
 export type CredentialMark = '' | 'degraded' | 'abnormal' | 'custom'
 
 export interface CredentialItemDto {
+  name: string
   model_cooldowns: ModelCooldownDto[]
   credential_id: number
   connection_type: ConnectionType

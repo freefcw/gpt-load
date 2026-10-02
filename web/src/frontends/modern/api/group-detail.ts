@@ -245,6 +245,7 @@ export async function discoverGroupModels(client: ApiClient, id: number, signal:
 }
 
 export interface CredentialRow {
+  name: string
   rpmPeakHour?: number
   id: number
   mask: string
@@ -292,6 +293,7 @@ export function readCredential(value: unknown): CredentialRow {
   const recovery = record(row.recovery)
   return {
     id: integer(row.credential_id, 1),
+    name: row.name === undefined ? '' : text(row.name),
     rpmPeakHour: row.rpm_peak_hour == null ? undefined : integer(row.rpm_peak_hour),
     mask: text(row.mask),
     account: account ? text(account.email ?? account.email_mask ?? '') : '',

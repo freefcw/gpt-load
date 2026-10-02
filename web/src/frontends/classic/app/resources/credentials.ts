@@ -72,6 +72,7 @@ export type {
 } from '@/api/control/types'
 
 export interface CredentialPatch {
+  name?: string
   status?: CredentialConfiguredStatus
   weight_manual?: number | null
   rpm_limit?: number
@@ -110,6 +111,7 @@ const credentialSummaryFields = [
 const credentialItemFields = [
   'model_cooldowns',
   'credential_id',
+  'name',
   'connection_type',
   'secret_version',
   'mask',
@@ -633,6 +635,7 @@ export function projectCredentialItem(value: unknown): CredentialItemDto {
   }
   return {
     credential_id: projectSafeInteger(record.credential_id, { minimum: 1 }),
+    name: projectString(record.name, { allowEmpty: true }),
     connection_type: connectionType,
     model_cooldowns: projectArray(record.model_cooldowns, projectModelCooldown),
     secret_version: projectSafeInteger(record.secret_version, { minimum: 1 }),

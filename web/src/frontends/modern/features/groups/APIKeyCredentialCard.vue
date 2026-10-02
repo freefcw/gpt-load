@@ -64,15 +64,16 @@ const issues = computed(() =>
 <template>
   <CredentialCardFrame :selected="selected" :pending="pending" compact>
     <template #heading>
-      <AppTooltip :label="t('groupDetail.selectCredential', { name: row.mask })"
+      <AppTooltip :label="t('groupDetail.selectCredential', { name: row.name || row.mask })"
         ><AppCheckbox
           :model-value="selected"
-          :label="t('groupDetail.selectCredential', { name: row.mask })"
+          :label="t('groupDetail.selectCredential', { name: row.name || row.mask })"
           label-hidden
           :disabled="disabled"
           @update:model-value="$emit('select', $event)"
       /></AppTooltip>
       <div class="modern-api-card-secret">
+        <AppOverflowText v-if="row.name" class="modern-api-card-name" :text="row.name" />
         <AppCopyValue
           :key="row.secretVersion"
           :value="row.mask"

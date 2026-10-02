@@ -182,6 +182,7 @@ function runMenuAction(
           t('group.credentials.columns.credential')
         }}</span>
         <span class="group-credential-record__credential">
+          <span v-if="item.name" class="group-credential-record__name">{{ item.name }}</span>
           <!-- 圆点贴在掩码左侧：折叠态一眼扫到颜色，只占 8px 不挤掉复制按钮。 -->
           <CredentialMarkIndicator :mark="item.mark" :note="item.mark_note" variant="dot" />
           <CopyChip

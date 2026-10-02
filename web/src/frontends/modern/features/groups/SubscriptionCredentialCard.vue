@@ -71,11 +71,11 @@ useLoadingActivity(() => Boolean(props.pending))
     :aria-busy="pending || undefined"
   >
     <header class="modern-subscription-card-heading">
-      <AppTooltip :label="t('groupDetail.selectCredential', { name: row.account || row.mask })">
+      <AppTooltip :label="t('groupDetail.selectCredential', { name: row.name || row.account || row.mask })">
         <AppCheckbox
           class="modern-subscription-card-select"
           :model-value="selected"
-          :label="t('groupDetail.selectCredential', { name: row.account || row.mask })"
+          :label="t('groupDetail.selectCredential', { name: row.name || row.account || row.mask })"
           label-hidden
           :disabled="disabled"
           @update:model-value="$emit('select', $event)"
@@ -83,7 +83,7 @@ useLoadingActivity(() => Boolean(props.pending))
       </AppTooltip>
       <div class="modern-subscription-card-identity">
         <div class="modern-subscription-card-name-line">
-          <AppOverflowText class="modern-subscription-card-name" :text="row.account || row.mask" />
+          <AppOverflowText class="modern-subscription-card-name" :text="row.name || row.account || row.mask" />
           <AppTooltip v-if="row.rpmPeakHour !== undefined" :label="t('rpm.hourPeak')">
             <span class="modern-subscription-card-rpm" tabindex="0"
               >{{ t('rpm.cardLabel') }} {{ n(row.rpmPeakHour) }}</span

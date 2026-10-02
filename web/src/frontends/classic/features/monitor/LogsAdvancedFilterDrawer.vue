@@ -37,6 +37,7 @@ const commonError = computed(() => {
     ['group_id', 'group'],
     ['channel_id', 'channel'],
     ['access_key_id', 'accessKey'],
+    ['client_ip', 'clientIP'],
     ['client_model', 'clientModel'],
   ] as const) {
     const key = props.errors[field]
@@ -127,6 +128,25 @@ function update(field: keyof LogFilterDraft, value: string): void {
                 :aria-describedby="describedBy"
                 :aria-invalid="invalid || undefined"
                 @input="update('request_id', ($event.target as HTMLInputElement).value)"
+              />
+            </template>
+          </FormField>
+          <FormField
+            id="logs-client-ip"
+            :label="t('monitor.logs.filters.clientIP')"
+            size="compact"
+            :error="error('client_ip')"
+          >
+            <template #default="{ describedBy, invalid }">
+              <input
+                id="logs-client-ip"
+                :value="draft.client_ip"
+                class="logs-advanced__mono"
+                autocomplete="off"
+                :spellcheck="false"
+                :aria-describedby="describedBy"
+                :aria-invalid="invalid || undefined"
+                @input="update('client_ip', ($event.target as HTMLInputElement).value)"
               />
             </template>
           </FormField>

@@ -535,6 +535,7 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 			handler.requestNow,
 		)
 		recorder.accessKeyMultiplier = accessKey.PriceMultiplier
+		recorder.clientIP, _ = utils.ClientIP(ginContext.Request)
 		defer func() {
 			recorder.completeMissingOutcome(
 				ginContext.Writer.Written(),

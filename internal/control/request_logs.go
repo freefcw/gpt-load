@@ -21,6 +21,7 @@ import (
 	"gpt-load/internal/jev"
 	app_errors "gpt-load/internal/platform/errors"
 	"gpt-load/internal/platform/response"
+	"gpt-load/internal/platform/utils"
 	"gpt-load/internal/pricing"
 	"gpt-load/internal/protocol"
 	"gpt-load/internal/reasoning"
@@ -144,6 +145,7 @@ type requestLogItemResponse struct {
 	Protocol                  string                       `json:"protocol"`
 	Operation                 *execution.Operation         `json:"operation"`
 	UpstreamProtocol          *protocol.Protocol           `json:"upstream_protocol"`
+	ClientIP                  *string                      `json:"client_ip"`
 	ClientModel               *string                      `json:"client_model"`
 	UpstreamModel             *string                      `json:"upstream_model"`
 	UpstreamReportedModel     *string                      `json:"upstream_reported_model"`
@@ -449,7 +451,7 @@ func parseRequestLogQuery(rawQuery string) (requestlog.ListQuery, *app_errors.AP
 	}
 	allowed := map[string]struct{}{
 		"from_ms": {}, "to_ms": {}, "group_id": {}, "channel_id": {}, "credential_id": {},
-		"client_model": {}, "upstream_model": {}, "model_consistency": {}, "access_key_id": {},
+		"client_ip": {}, "client_model": {}, "upstream_model": {}, "model_consistency": {}, "access_key_id": {},
 		"status": {}, "request_id": {}, "protocol": {}, "operation": {}, "stream": {}, "final_status_code": {},
 		"audit_status": {}, "audit_rule": {},
 		"usage_state": {}, "cost_state": {}, "pricing_completeness": {}, "cache_present": {},
@@ -526,6 +528,13 @@ func parseRequestLogQuery(rawQuery string) (requestlog.ListQuery, *app_errors.AP
 			return requestlog.ListQuery{}, app_errors.ErrValidation
 		}
 		query.ClientModel = value
+	}
+	if value, ok := singleQueryValue(values, "client_ip"); ok {
+		parsed, err := utils.NormalizeIP(value)
+		if err != nil {
+			return requestlog.ListQuery{}, app_errors.ErrValidation
+		}
+		query.ClientIP = parsed
 	}
 	if value, ok := singleQueryValue(values, "upstream_model"); ok {
 		if !validUsageModel(value) {
@@ -1155,6 +1164,7 @@ func mapRequestLogItemResponse(
 		Protocol:                string(record.Protocol),
 		Operation:               operation,
 		UpstreamProtocol:        upstreamProtocol,
+		ClientIP:                nullableRequestLogModel(record.ClientIP),
 		ClientModel:             nullableRequestLogModel(record.ClientModel),
 		UpstreamModel:           nullableRequestLogModel(record.UpstreamModel),
 		UpstreamReportedModel:   nullableRequestLogModel(record.UpstreamReportedModel),
@@ -1648,6 +1658,10 @@ func (s *Service) CredentialLabels(credentialIDs []uint) map[uint]string {
 		seen[credentialID] = struct{}{}
 		ref, known := s.registry.CredentialRef(credentialID)
 		if !known {
+			continue
+		}
+		if strings.TrimSpace(ref.Name) != "" {
+			labels[credentialID] = strings.TrimSpace(ref.Name)
 			continue
 		}
 		labels[credentialID] = ""

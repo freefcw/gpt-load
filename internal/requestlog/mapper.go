@@ -10,6 +10,7 @@ import (
 	"gpt-load/internal/execution"
 	"gpt-load/internal/platform/epochms"
 	"gpt-load/internal/platform/redact"
+	"gpt-load/internal/platform/utils"
 	"gpt-load/internal/pricing"
 	"gpt-load/internal/requestaudit"
 	"gpt-load/internal/storage/models"
@@ -44,6 +45,14 @@ func mapEvent(
 	receipt, err := canonicalPricingReceipt(event.Usage.Pricing, string(event.Usage.ChannelID))
 	if err != nil {
 		return models.RequestLog{}, fmt.Errorf("map request event pricing receipt: %w", err)
+	}
+	var clientIP *string
+	if value := strings.TrimSpace(event.ClientIP); value != "" {
+		address, err := utils.NormalizeIP(value)
+		if err != nil {
+			return models.RequestLog{}, fmt.Errorf("map request event client IP: %w", err)
+		}
+		clientIP = &address
 	}
 	attempts := make([]models.RequestLogAttempt, 0, len(event.Attempts))
 	for _, attempt := range event.Attempts {
@@ -185,6 +194,7 @@ func mapEvent(
 		CredentialID:                event.Usage.CredentialID,
 		Protocol:                    string(event.Protocol),
 		Operation:                   string(event.Operation),
+		ClientIP:                    clientIP,
 		ClientModel:                 redactIdentityValue(redactor, projectModel(event.ClientModel)),
 		UpstreamModel:               redactIdentityValue(redactor, projectModel(event.UpstreamModel)),
 		UpstreamReportedModel:       redactIdentityValue(redactor, projectModel(event.UpstreamReportedModel)),

@@ -80,6 +80,7 @@ const session = useAuthSession()
 const route = useRoute()
 const router = useRouter()
 const { locale, t, te } = useI18n()
+const showClientIP = ref(false)
 
 function auditTooltip(log: RequestLogItemDto): string {
   const audit = log.request_audit
@@ -222,6 +223,7 @@ const filterSignature = computed(() =>
   ]),
 )
 const advancedFilterKeys: readonly (keyof RequestLogFilters)[] = [
+  'client_ip',
   'request_id',
   'stream',
   'final_status_code',
@@ -353,6 +355,7 @@ function advancedChipLabel(key: keyof RequestLogFilters, value: unknown): string
     return t('monitor.logs.filters.appliedCredential', { value })
   }
   if (key === 'client_model') return t('monitor.logs.filters.appliedClientModel', { value })
+  if (key === 'client_ip') return t('monitor.logs.filters.appliedClientIP', { value })
   if (key === 'upstream_model') return t('monitor.logs.filters.appliedUpstreamModel', { value })
   if (key === 'request_id') return t('monitor.logs.filters.appliedRequestId', { value })
   if (key === 'protocol') return String(value)
@@ -441,6 +444,10 @@ async function filterByAccessKey(accessKeyID: number): Promise<void> {
 
 async function filterByClientModel(clientModel: string): Promise<void> {
   await commitFilters({ ...appliedFilters.value, client_model: clientModel })
+}
+
+async function filterByClientIP(clientIP: string): Promise<void> {
+  await commitFilters({ ...appliedFilters.value, client_ip: clientIP })
 }
 
 async function applyFilters(): Promise<void> {
@@ -742,6 +749,7 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
 <template>
   <div class="logs-tab">
     <LogsFilterForm
+      v-model:show-client-ip="showClientIP"
       :draft="draft"
       :errors="filterErrors"
       :groups="groupsQuery.data.value ?? []"
@@ -778,7 +786,7 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
       v-if="logsQuery.isPending.value || initialLoading"
       variant="collection"
       :rows="appliedFilters.limit ?? 20"
-      :columns="isAccessKey ? 7 : 9"
+      :columns="(isAccessKey ? 7 : 9) + (showClientIP ? 1 : 0)"
       row-height="72px"
       mobile-row-height="176px"
       :concealed="!initialLoading"
@@ -803,14 +811,20 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
         v-if="collectionTransition"
         variant="collection"
         :rows="skeletonRows"
-        :columns="isAccessKey ? 7 : 9"
+        :columns="(isAccessKey ? 7 : 9) + (showClientIP ? 1 : 0)"
         row-height="72px"
         mobile-row-height="176px"
         :label="t('monitor.logs.loading')"
       />
       <LedgerRecordList
         v-else-if="logs.length"
-        :grid-class="isAccessKey ? 'logs-list logs-list--scoped' : 'logs-list'"
+        :grid-class="
+          [
+            'logs-list',
+            isAccessKey ? 'logs-list--scoped' : '',
+            showClientIP ? 'logs-list--ip' : '',
+          ].join(' ')
+        "
         :label="t('monitor.logs.caption')"
         :row-count="logs.length + 1"
         :scroll-hint="t('monitor.scrollHint')"
@@ -828,6 +842,9 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
             {{ t('monitor.logs.columns.tokens') }}
           </span>
           <span role="columnheader">{{ t('monitor.logs.columns.timing') }}</span>
+          <span v-if="showClientIP" role="columnheader">{{
+            t('monitor.logs.columns.clientIP')
+          }}</span>
           <span role="columnheader">{{ t('monitor.logs.columns.actions') }}</span>
         </template>
 
@@ -1121,6 +1138,24 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
             </OverflowTooltip>
           </div>
           <div
+            v-if="showClientIP"
+            class="ledger-record-list__cell logs-list__cell"
+            role="cell"
+            :data-label="t('monitor.logs.columns.clientIP')"
+          >
+            <OverflowTooltip
+              v-if="log.client_ip"
+              as="button"
+              type="button"
+              class="filterable-value"
+              :content="log.client_ip"
+              :aria-label="t('monitor.logs.filterIP', { value: log.client_ip })"
+              @click="filterByClientIP(log.client_ip)"
+              >{{ log.client_ip }}</OverflowTooltip
+            >
+            <span v-else>—</span>
+          </div>
+          <div
             class="ledger-record-list__cell logs-list__action"
             role="cell"
             :data-label="t('monitor.logs.columns.actions')"
@@ -1177,6 +1212,7 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
       :group-names="groupNames"
       :channels="channelsByID"
       @update:open="setDetailOpen(undefined, $event)"
+      @filter-ip="filterByClientIP"
     />
   </div>
 </template>
@@ -1191,7 +1227,7 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
 .logs-list {
   /* 时间定长、Token/耗时/成本按实际内容重算，压出的宽度装下新增的密钥列。 */
   --ledger-record-list-grid: 96px minmax(96px, 0.62fr) minmax(132px, 0.86fr) minmax(180px, 1.2fr)
-    96px minmax(76px, 0.42fr) minmax(104px, 0.6fr) 100px 34px;
+    96px minmax(76px, 0.42fr) minmax(104px, 0.6fr) 100px var(--ledger-client-ip-column,) 34px;
   --ledger-record-list-column-gap: 16px;
   --ledger-record-list-record-min-height: 72px;
   --ledger-record-list-record-padding: 10px 0;
@@ -1199,7 +1235,11 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
 
 .logs-list--scoped {
   --ledger-record-list-grid: 96px minmax(180px, 1.2fr) 96px minmax(76px, 0.42fr)
-    minmax(104px, 0.6fr) 100px 34px;
+    minmax(104px, 0.6fr) 100px var(--ledger-client-ip-column,) 34px;
+}
+
+.logs-list--ip {
+  --ledger-client-ip-column: 160px;
 }
 
 .logs-list__cell {
@@ -1470,7 +1510,7 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
   .logs-list {
     --ledger-record-list-column-gap: 10px;
     --ledger-record-list-grid: 92px minmax(88px, 0.6fr) minmax(118px, 0.82fr) minmax(160px, 1.15fr)
-      92px minmax(72px, 0.42fr) minmax(96px, 0.58fr) 96px 32px;
+      92px minmax(72px, 0.42fr) minmax(96px, 0.58fr) 96px var(--ledger-client-ip-column,) 32px;
   }
 }
 

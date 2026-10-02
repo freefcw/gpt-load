@@ -953,6 +953,9 @@ export default {
       },
     },
     logs: {
+      ipColumn: 'IP column',
+      copyIP: 'Copy IP',
+      filterIP: 'Show only logs for IP {value}',
       loading: 'Loading request logs…',
       loadFailed: 'Unable to load request logs.',
       loadMore: 'Load more',
@@ -989,6 +992,7 @@ export default {
         partialFailed: 'Some filter options are unavailable. Log queries remain available.',
       },
       filters: {
+        clientIP: 'IP',
         label: 'Request log filters',
         timeRange: 'Time range',
         from: 'From',
@@ -1068,6 +1072,7 @@ export default {
         appliedCostState: 'Cost {value}',
         appliedCompleteness: 'Pricing {value}',
         appliedRequestId: 'Request ID {value}',
+        appliedClientIP: 'IP {value}',
         timezone: 'Local timezone',
         lastRefreshed: 'Last successful refresh',
         remove: 'Remove filter {value}',
@@ -1366,6 +1371,7 @@ export default {
         },
       },
       columns: {
+        clientIP: 'IP',
         time: 'Time',
         modelProtocol: 'Model / protocol',
         response: 'Response',

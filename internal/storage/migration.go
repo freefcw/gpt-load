@@ -128,6 +128,8 @@ var migrations = []migration{
 	{ID: migrationfiles.ID0029, Up: migrationfiles.Up0029, Validate: migrationfiles.Validate0029, ValidateRecoverable: migrationfiles.ValidateRecoverable0029},
 	// 上游 0022 (rpm_stats) 顺延追加为 0030。
 	{ID: migrationfiles.ID0030, Up: migrationfiles.Up0030, Validate: migrationfiles.Validate0030, ValidateRecoverable: migrationfiles.ValidateRecoverable0030},
+	{ID: migrationfiles.ID0031, Up: migrationfiles.Up0031, Validate: migrationfiles.Validate0031, ValidateRecoverable: migrationfiles.ValidateRecoverable0031},
+	{ID: migrationfiles.ID0032, Up: migrationfiles.Up0032, Validate: migrationfiles.Validate0032, ValidateRecoverable: migrationfiles.ValidateRecoverable0032},
 }
 
 func applyMigrations(db *gorm.DB) error {

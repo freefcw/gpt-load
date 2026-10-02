@@ -61,6 +61,7 @@ type requestRecorder struct {
 	autoDecision         *automodel.Decision
 	sink                 telemetry.RequestLogSink
 	requestID            string
+	clientIP             string
 	startedAt            time.Time
 	timingStarted        bool
 	finishedAt           time.Time
@@ -150,6 +151,7 @@ func (recorder *requestRecorder) emit() {
 	}
 	reportedModel, modelConsistency := requestOutcomeModelConsistency(recorder.outcome)
 	recorder.sink.Emit(telemetry.RequestEvent{
+		ClientIP:              recorder.clientIP,
 		AutoDecision:          recorder.autoLogDecision(),
 		RequestAudit:          recorder.audit,
 		RequestID:             recorder.requestID,

@@ -42,6 +42,9 @@ func (service *Service) List(ctx context.Context, input ListQuery) (Page, error)
 	if input.ClientModel != "" {
 		query = query.Where("client_model = ?", input.ClientModel)
 	}
+	if input.ClientIP != "" {
+		query = query.Where("client_ip = ?", input.ClientIP)
+	}
 	if input.ModelConsistency != "" {
 		query = query.Where("model_consistency = ?", input.ModelConsistency)
 	}
@@ -378,11 +381,17 @@ func decodeRequestLogRows(rows []models.RequestLog) ([]Record, error) {
 		}
 		total := telemetry.TotalPricing(telemetry.PricingObservation{CostState: row.CostState, PricingCompleteness: row.PricingCompleteness, EstimatedCostNanoUSD: row.EstimatedCostNanoUSD}, decision, audit)
 		records = append(records, Record{
-			AutoDecision:          decision,
-			RequestAudit:          audit,
-			TotalPricing:          total,
-			RequestID:             row.ID,
-			CompletedAtMS:         row.CompletedAtMS,
+			AutoDecision:  decision,
+			RequestAudit:  audit,
+			TotalPricing:  total,
+			RequestID:     row.ID,
+			CompletedAtMS: row.CompletedAtMS,
+			ClientIP: func() string {
+				if row.ClientIP == nil {
+					return ""
+				}
+				return *row.ClientIP
+			}(),
 			AccessKey:             AccessKeyRef{ID: row.AccessKeyID, Deleted: true},
 			Protocol:              protocol.Protocol(row.Protocol),
 			Operation:             execution.Operation(row.Operation),

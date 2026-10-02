@@ -80,6 +80,7 @@ type ListQuery struct {
 	GroupID             *uint
 	ChannelID           channel.ID
 	ClientModel         string
+	ClientIP            string
 	UpstreamModel       string
 	ModelConsistency    telemetry.ModelConsistency
 	AccessKeyID         *uint
@@ -130,6 +131,7 @@ type Record struct {
 	TotalPricing            telemetry.PricingObservation
 	RequestID               string
 	CompletedAtMS           int64
+	ClientIP                string
 	AccessKey               AccessKeyRef
 	Protocol                protocol.Protocol
 	Operation               execution.Operation

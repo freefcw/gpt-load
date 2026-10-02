@@ -43,6 +43,7 @@ const query = useQuery({
 const item = computed(() => query.data.value ?? props.row)
 const state = computed(() => credentialStatus(item.value))
 const saved = ref<CredentialRow>()
+const name = ref('')
 const weight = ref('')
 const proxyMode = ref('inherit')
 const proxyURL = ref('')
@@ -55,7 +56,8 @@ const dirty = computed(
   () =>
     !completed.value &&
     Boolean(saved.value) &&
-    (weight.value !== String(saved.value!.weightManual ?? '') ||
+    (name.value !== saved.value!.name ||
+      weight.value !== String(saved.value!.weightManual ?? '') ||
       proxyMode.value !== saved.value!.proxy.mode ||
       Boolean(proxyURL.value)),
 )
@@ -64,6 +66,7 @@ watch(
   (value) => {
     if (!value || dirty.value || saving.value) return
     saved.value = value
+    name.value = value.name
     weight.value = String(value.weightManual ?? '')
     proxyMode.value = value.proxy.mode
     proxyURL.value = ''
@@ -100,6 +103,7 @@ async function save(): Promise<void> {
   attempted.value = true
   if (weightInvalid.value || proxyInvalid.value) return
   const patch: Parameters<typeof updateCredential>[3] = {}
+  if (name.value !== saved.value.name) patch.name = name.value.trim()
   if (weight.value !== String(saved.value.weightManual ?? ''))
     patch.weight_manual = weight.value ? Number(weight.value) : null
   if (proxyChanged.value)
@@ -244,6 +248,15 @@ useMessageSource(() =>
             credentialTime(cooldown.until, locale)
           }}</small>
         </div>
+      </section>
+      <section class="modern-credential-detail-section">
+        <AppTextField
+          v-model="name"
+          :label="t('groupDetail.credentialName')"
+          :placeholder="t('groupDetail.credentialNamePlaceholder')"
+          size="sm"
+          :disabled="saving"
+        />
       </section>
       <section class="modern-credential-detail-section">
         <div class="modern-credential-detail-settings-title">

@@ -62,7 +62,7 @@ func BuildContainer() (*dig.Container, error) {
 			return db, err
 		},
 		httplifecycle.NewCoordinator,
-		app.NewEngineWithLifecycle,
+		app.NewEngineWithLifecycleAndConfig,
 		webui.NewServer,
 		state.NewCredentialRegistry,
 		state.NewResponseBindings,

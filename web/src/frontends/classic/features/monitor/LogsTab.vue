@@ -134,8 +134,12 @@ function affinityTooltip(log: RequestLogItemDto): string {
       return t('monitor.logs.drawer.affinityPromptPrefix')
     case 'prompt_cache_key':
       return t('monitor.logs.drawer.affinityPromptCacheKey')
+    case 'session_id':
+      return t('monitor.logs.drawer.affinitySessionID')
     case 'response_continuity':
       return t('monitor.logs.drawer.affinityResponseContinuity')
+    case 'websocket_binding':
+      return t('monitor.logs.drawer.affinityWebsocketBinding')
     default:
       return t('monitor.logs.drawer.affinity')
   }

@@ -20,6 +20,7 @@ import (
 	"gpt-load/internal/platform/config"
 	app_errors "gpt-load/internal/platform/errors"
 	"gpt-load/internal/protocol"
+	"gpt-load/internal/ratelimit"
 	"gpt-load/internal/state"
 	"gpt-load/internal/storage/models"
 )
@@ -192,6 +193,31 @@ func TestUpdateGroupSettingsPublishesOnceAndReturnsNewSettings(t *testing.T) {
 	}
 	if !reflect.DeepEqual(stored, result) {
 		t.Fatalf("stored settings = %#v, want %#v", stored, result)
+	}
+}
+
+func TestUpdateGroupSettingsReturnsLiveConcurrency(t *testing.T) {
+	t.Parallel()
+	fixture := newServiceFixture(t)
+	groupID := createGroupWithCredentials(t, fixture, "sk-live-concurrency")
+	limiter := ratelimit.NewDataPlaneConcurrency()
+	fixture.service.limitUsage = NewLiveLimitUsage(nil, nil, nil, limiter)
+	release, ok := limiter.AcquireGroup(groupID, 0)
+	if !ok {
+		t.Fatal("failed to occupy group concurrency")
+	}
+	defer release()
+
+	result, err := fixture.service.UpdateGroupSettings(t.Context(), groupID, GroupSettingsUpdateRequest{
+		Overrides: optionalField[config.Settings]{Set: true, Value: config.Settings{
+			state.SettingConcurrencyLimit: json.Number("4"),
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Concurrency.Current != 1 || result.Concurrency.Limit != 4 {
+		t.Fatalf("updated concurrency = %+v, want current=1 limit=4", result.Concurrency)
 	}
 }
 

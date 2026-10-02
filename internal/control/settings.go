@@ -44,6 +44,7 @@ type CORSConfigResponse struct {
 }
 
 type SettingsValuesResponse struct {
+	GlobalConcurrencyLimit    int64                 `json:"global_concurrency_limit"`
 	RequestRedaction          []requestredact.Rule  `json:"request_redaction"`
 	Jev                       jev.Config            `json:"jev"`
 	RequestAudit              requestaudit.Config   `json:"request_audit"`
@@ -422,9 +423,10 @@ func mapSettingsResponse(
 		DecisionModels: decisionModelNames(snapshot),
 		Revision:       snapshot.Revision,
 		Values: SettingsValuesResponse{
-			RequestRedaction: snapshot.RequestRedaction.Rules(),
-			AutoModel:        newAutoModelSettingsView(snapshot.AutoModels),
-			Jev:              snapshot.Jev, RequestAudit: snapshot.RequestAudit,
+			GlobalConcurrencyLimit: settings.GlobalConcurrencyLimit,
+			RequestRedaction:       snapshot.RequestRedaction.Rules(),
+			AutoModel:              newAutoModelSettingsView(snapshot.AutoModels),
+			Jev:                    snapshot.Jev, RequestAudit: snapshot.RequestAudit,
 			FirstByteTimeout:  durationSeconds(settings.FirstByteTimeout),
 			RequestTimeout:    durationSeconds(settings.RequestTimeout),
 			StreamIdleTimeout: durationSeconds(settings.StreamIdleTimeout),

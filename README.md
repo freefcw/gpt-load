@@ -164,6 +164,10 @@ This forwards the cache configuration without guaranteeing an upstream cache hit
 
 ## Deployment and data
 
+### Data-plane concurrency limits
+
+Global and Group concurrency limits are configurable. Groups inherit the global limit by default and may override it; 0 means unlimited. A new request that reaches a limit immediately returns concurrency_limit_exceeded instead of waiting or switching Groups. Response cancellation requests remain available when limits are full so clients can release work. Global limits count unfinished logical requests, while Group limits count upstream work currently executing. Usage reads, control-plane requests, and background jobs do not consume these data-plane slots. Counters live in the current process and hot updates do not interrupt existing requests. With multiple replicas, each instance counts independently; the limit is not shared across the cluster.
+
 Docker Compose uses application-managed SQLite by default. Data lives in the `gpt-load-data` named volume and includes the database, `auth.key`, and `encryption.key`.
 
 > [!IMPORTANT]

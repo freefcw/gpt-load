@@ -22,6 +22,7 @@ import (
 )
 
 type GroupSettingsResponse struct {
+	Concurrency                ConcurrencyView              `json:"concurrency"`
 	PriceMultiplier            string                       `json:"price_multiplier"`
 	ChannelID                  channel.ID                   `json:"channel_id"`
 	ConnectionType             models.ConnectionType        `json:"connection_type"`
@@ -93,6 +94,12 @@ func (s *Service) GetGroupSettings(ctx context.Context, groupID uint) (GroupSett
 	if err != nil {
 		return GroupSettingsResponse{}, err
 	}
+	usage := s.dataPlaneUsage()
+	limit := response.Effective.ConcurrencyLimit
+	if view, ok := snapshot.GroupCatalog[groupID]; ok {
+		limit = view.ConcurrencyLimit
+	}
+	response.Concurrency = dataPlaneConcurrencyView(usage.Groups[groupID], limit)
 	response.Proxy, err = s.groupProxyView(ctx, s.db, group)
 	return response, err
 }
@@ -413,6 +420,12 @@ func (s *Service) UpdateGroupSettings(
 	if err != nil {
 		return GroupSettingsResponse{}, err
 	}
+	usage := s.dataPlaneUsage()
+	limit := response.Effective.ConcurrencyLimit
+	if view, ok := snapshot.GroupCatalog[groupID]; ok {
+		limit = view.ConcurrencyLimit
+	}
+	response.Concurrency = dataPlaneConcurrencyView(usage.Groups[groupID], limit)
 	response.Proxy, err = s.groupProxyView(ctx, s.db, committed)
 	return response, err
 }

@@ -41,6 +41,7 @@ type GroupCollectionCredentialCounts struct {
 }
 
 type GroupCollectionItem struct {
+	Concurrency      ConcurrencyView                 `json:"concurrency"`
 	PriceMultiplier  string                          `json:"price_multiplier"`
 	ID               uint                            `json:"id"`
 	Name             string                          `json:"name"`
@@ -137,6 +138,15 @@ func (s *Service) captureGroupCollectionRecords(
 	}
 	if err != nil {
 		return 0, nil, err
+	}
+	usage := s.dataPlaneUsage()
+	for index := range records {
+		groupID := records[index].ID
+		limit := int64(0)
+		if group, ok := snapshot.GroupCatalog[groupID]; ok {
+			limit = group.ConcurrencyLimit
+		}
+		records[index].Concurrency = dataPlaneConcurrencyView(usage.Groups[groupID], limit)
 	}
 	return observedAt.UnixMilli(), records, nil
 }

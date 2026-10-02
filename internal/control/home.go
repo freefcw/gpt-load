@@ -35,6 +35,7 @@ type HomeAccessKey struct {
 }
 
 type HomeBase struct {
+	Concurrency      ConcurrencyView          `json:"concurrency"`
 	Inventory        HomeInventory            `json:"inventory"`
 	AccessKeys       []HomeAccessKey          `json:"access_keys"`
 	CurrentAccessKey *AccessKeyCollectionItem `json:"current_access_key"`
@@ -190,12 +191,28 @@ func (s *Service) readHomeBase(
 		Inventory:  inventory,
 		AccessKeys: accessKeys,
 	}
+	var accessKeyRPMUsed, accessKeyConcurrencyUsed int64
+	if accessKeyID != nil {
+		accessKeyRPMUsed, accessKeyConcurrencyUsed = s.accessKeyLiveUsage(*accessKeyID)
+	}
+	usage := s.dataPlaneUsage()
+	if s.dataPlaneConfigured() {
+		if accessKeyID == nil {
+			// 管理员首页展示进程级全局并发；访问密钥首页只展示自身范围，避免把全局流量暴露给数据面用户。
+			result.Concurrency = dataPlaneConcurrencyView(usage.Global, snapshot.Settings.GlobalConcurrencyLimit)
+		} else {
+			result.Concurrency = dataPlaneConcurrencyView(
+				accessKeyConcurrencyUsed,
+				snapshot.AccessKeysByID[*accessKeyID].ConcurrencyLimit,
+			)
+		}
+	}
 	if accessKeyID != nil {
 		current, err := mapHomeCurrentAccessKey(accessKeyRows[0], nowMS)
 		if err != nil {
 			return HomeBase{}, err
 		}
-		current.RPMUsed, current.ConcurrencyUsed = s.accessKeyLiveUsage(*accessKeyID)
+		current.RPMUsed, current.ConcurrencyUsed = accessKeyRPMUsed, accessKeyConcurrencyUsed
 		if s.accessQuota != nil {
 			status := mapAccessKeyCostLimitStatus(s.accessQuota.Snapshot(*accessKeyID, now))
 			if len(status.Rules) > 0 {

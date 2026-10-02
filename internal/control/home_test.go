@@ -13,6 +13,7 @@ import (
 
 	"gpt-load/internal/channel"
 	"gpt-load/internal/protocol"
+	"gpt-load/internal/ratelimit"
 	"gpt-load/internal/state"
 	stateloader "gpt-load/internal/state/loader"
 	"gpt-load/internal/storage"
@@ -388,5 +389,60 @@ func TestReadHomeBaseKeepsDatabaseRowsInOneReadSnapshot(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("ReadHomeBase did not finish")
+	}
+}
+
+func TestReadHomeBaseReportsZeroConcurrencyWithoutLimiter(t *testing.T) {
+	t.Parallel()
+	fixture := newServiceFixture(t)
+	if fixture.service.dataPlaneConfigured() {
+		t.Fatal("fixture unexpectedly has a data-plane limiter")
+	}
+	base, err := fixture.service.ReadHomeBase(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("ReadHomeBase() error = %v", err)
+	}
+	if base.Concurrency != (ConcurrencyView{}) {
+		t.Fatalf("HomeBase.Concurrency = %+v, want zero view without data-plane", base.Concurrency)
+	}
+	encoded, err := json.Marshal(homeResponse{HomeBase: base})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if !strings.Contains(string(encoded), `"concurrency":{"current":0,"limit":0}`) {
+		t.Fatalf("home response dropped the concurrency view: %s", encoded)
+	}
+}
+
+func TestReadAccessKeyHomeBaseUsesAccessKeyConcurrencyScope(t *testing.T) {
+	t.Parallel()
+	fixture := newServiceFixture(t)
+	created, err := fixture.service.CreateAccessKey(t.Context(), AccessKeyCreateRequest{
+		Name: "scoped-concurrency", Key: "scoped-concurrency-key",
+		ConcurrencyLimit: OptionalRPMLimit{Set: true, Value: 3},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessKeyLimiter := ratelimit.NewAccessKeyConcurrency()
+	dataPlaneLimiter := ratelimit.NewDataPlaneConcurrency()
+	fixture.service.limitUsage = NewLiveLimitUsage(nil, accessKeyLimiter, nil, dataPlaneLimiter)
+	releaseAccessKey, ok := accessKeyLimiter.Acquire(created.ID, 3)
+	if !ok {
+		t.Fatal("failed to occupy access-key concurrency")
+	}
+	defer releaseAccessKey()
+	releaseGlobal, ok := dataPlaneLimiter.AcquireGlobal(10)
+	if !ok {
+		t.Fatal("failed to occupy global concurrency")
+	}
+	defer releaseGlobal()
+
+	base, err := fixture.service.ReadAccessKeyHomeBase(t.Context(), 1, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base.Concurrency.Current != 1 || base.Concurrency.Limit != 3 {
+		t.Fatalf("scoped home concurrency = %+v, want current=1 limit=3", base.Concurrency)
 	}
 }

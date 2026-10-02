@@ -208,3 +208,22 @@ func parseOne(t *testing.T, raw string) Entry {
 	}
 	return doc.Entries[0]
 }
+func TestParsePreservesCodexPlanType(t *testing.T) {
+	official := parseOne(t, `{ "auth_mode":"chatgpt", "OPENAI_API_KEY":null, "plan_type":"plus", "tokens":{"access_token":"access","refresh_token":"refresh","account_id":"account"} }`)
+	var officialValue map[string]any
+	if err := json.Unmarshal(official.Credential, &officialValue); err != nil {
+		t.Fatal(err)
+	}
+	if officialValue["plan_type"] != "plus" {
+		t.Fatalf("official plan_type = %v, want plus", officialValue["plan_type"])
+	}
+
+	sub2api := parseOne(t, `{ "platform":"openai", "type":"oauth", "credentials":{"access_token":"access","refresh_token":"refresh","plan_type":"pro","chatgpt_account_id":"account","expires_at":1800000000,"client_id":"app_EMoamEEZ73f0CkXaXp7hrann"} }`)
+	var sub2apiValue map[string]any
+	if err := json.Unmarshal(sub2api.Credential, &sub2apiValue); err != nil {
+		t.Fatal(err)
+	}
+	if sub2apiValue["plan_type"] != "pro" {
+		t.Fatalf("sub2api plan_type = %v, want pro", sub2apiValue["plan_type"])
+	}
+}

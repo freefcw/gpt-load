@@ -212,7 +212,14 @@ const authStates = ['ready', 'refreshing', 'reauthorization_required', 'outcome_
 const observationStates = ['fresh', 'stale', 'refreshing', 'error', 'unavailable'] as const
 const quotaStates = ['available', 'exhausted', 'unknown'] as const
 const planLevels = ['free', 'standard', 'premium', 'elite'] as const
-const accountFields = ['email', 'email_mask', 'expires_at_ms', 'last_refresh_at_ms', 'base_url'] as const
+const accountFields = [
+  'plan_type',
+  'email',
+  'email_mask',
+  'expires_at_ms',
+  'last_refresh_at_ms',
+  'base_url',
+] as const
 const observationFields = [
   'state',
   'snapshot',
@@ -362,12 +369,14 @@ function projectAccount(
   const record = projectRecord(value)
   assertNoSecretLikeFields(record, accountFields)
   const email = record.email === undefined ? undefined : projectString(record.email)
+  const planType = record.plan_type === undefined ? undefined : projectString(record.plan_type)
   const emailMask = record.email_mask === undefined ? undefined : projectString(record.email_mask)
   if (connectionType === 'api_key' && (email !== undefined || emailMask !== undefined)) {
     invalidResponse()
   }
   const baseURL = record.base_url === undefined ? undefined : projectString(record.base_url)
   return {
+    ...(planType === undefined ? {} : { plan_type: planType }),
     ...(email === undefined ? {} : { email }),
     ...(emailMask === undefined ? {} : { email_mask: emailMask }),
     ...(record.expires_at_ms === undefined

@@ -96,6 +96,7 @@ type CredentialSummaryResponse struct {
 }
 
 type CredentialAccountResponse struct {
+	PlanType        string `json:"plan_type,omitempty"`
 	Email           string `json:"email,omitempty"`
 	EmailMask       string `json:"email_mask,omitempty"`
 	ExpiresAtMS     *int64 `json:"expires_at_ms,omitempty"`
@@ -240,7 +241,8 @@ func (s *Service) credentialPresentation(
 		}
 		stagedAccount := subscriptionCredentialAccount(credential)
 		account := CredentialAccountResponse{
-			Email: strings.TrimSpace(credential.Account().Email), EmailMask: stagedAccount.EmailMask,
+			PlanType: strings.TrimSpace(credential.Account().PlanType),
+			Email:    strings.TrimSpace(credential.Account().Email), EmailMask: stagedAccount.EmailMask,
 			ExpiresAtMS: stagedAccount.ExpiresAtMS, LastRefreshAtMS: stagedAccount.LastRefreshAtMS,
 			BaseURL: stagedAccount.BaseURL,
 		}

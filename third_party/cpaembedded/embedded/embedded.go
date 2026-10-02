@@ -74,6 +74,7 @@ func IsDefinitiveRefreshRejection(code string) bool {
 // Callers must encrypt the complete value before persistence.
 type CodexCredential struct {
 	Type         string `json:"type"`
+	PlanType     string `json:"plan_type,omitempty"`
 	IDToken      string `json:"id_token,omitempty"`
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -269,6 +270,9 @@ func RefreshCodexCredentialOnce(ctx context.Context, current CodexCredential, op
 	if refreshed.Email == "" {
 		refreshed.Email = current.Email
 	}
+	if refreshed.PlanType == "" {
+		refreshed.PlanType = current.PlanType
+	}
 	refreshed.BaseURL = current.BaseURL
 	if refreshed.AccountID != current.AccountID {
 		return CodexCredential{}, ErrCredentialIdentityChanged
@@ -325,6 +329,7 @@ func ParseCodexCredentialJSON(raw []byte) (CodexCredential, error) {
 	credential.IDToken = strings.TrimSpace(credential.IDToken)
 	credential.AccountID = strings.TrimSpace(credential.AccountID)
 	credential.Email = strings.TrimSpace(credential.Email)
+	credential.PlanType = safeCodexPlan(credential.PlanType)
 	credential.Expire = strings.TrimSpace(credential.Expire)
 	credential.LastRefresh = strings.TrimSpace(credential.LastRefresh)
 	if err := validateCredential(credential); err != nil {

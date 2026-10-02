@@ -249,6 +249,7 @@ export interface CredentialRow {
   id: number
   mask: string
   account: string
+  planType?: string
   state: CredentialState
   enabled: boolean
   weight: number
@@ -294,6 +295,7 @@ export function readCredential(value: unknown): CredentialRow {
     rpmPeakHour: row.rpm_peak_hour == null ? undefined : integer(row.rpm_peak_hour),
     mask: text(row.mask),
     account: account ? text(account.email ?? account.email_mask ?? '') : '',
+    planType: account?.plan_type === undefined ? undefined : text(account.plan_type),
     state: oneOf(row.effective_status, credentialStates),
     enabled: oneOf(row.configured_status, ['active', 'disabled']) === 'active',
     weight: integer(row.weight),

@@ -28,6 +28,7 @@ var (
 // JSON shape deliberately remains compatible with CPA's exported auth file.
 type Credential struct {
 	Type         string `json:"type"`
+	PlanType     string `json:"plan_type,omitempty"`
 	IDToken      string `json:"id_token,omitempty"`
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -433,6 +434,7 @@ func executeRequestToBridge(value ExecuteRequest) cpaembedded.ExecuteRequest {
 func credentialFromBridge(value cpaembedded.CodexCredential) Credential {
 	return Credential{
 		Type:         value.Type,
+		PlanType:     value.PlanType,
 		IDToken:      value.IDToken,
 		AccessToken:  value.AccessToken,
 		RefreshToken: value.RefreshToken,
@@ -447,6 +449,7 @@ func credentialFromBridge(value cpaembedded.CodexCredential) Credential {
 func credentialToBridge(value Credential) cpaembedded.CodexCredential {
 	return cpaembedded.CodexCredential{
 		Type:         value.Type,
+		PlanType:     value.PlanType,
 		IDToken:      value.IDToken,
 		AccessToken:  value.AccessToken,
 		RefreshToken: value.RefreshToken,

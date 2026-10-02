@@ -11,6 +11,7 @@ const fields = computed(() => {
   const observation = row.observation
   const account = observation?.account
   return [
+    ['plan', props.row.planType],
     ['organization', observation?.organization],
     ['seat', account?.seat],
     ['billing', account?.billing],

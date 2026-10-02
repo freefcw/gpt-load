@@ -233,6 +233,10 @@ func mapCodex(object map[string]any) (map[string]any, string) {
 	for _, key := range []string{"access_token", "refresh_token", "id_token", "account_id"} {
 		m.copyString(key, tokens, key)
 	}
+	m.copyString("plan_type", object, "plan_type")
+	if _, exists := m.out["plan_type"]; !exists {
+		m.copyString("plan_type", tokens, "plan_type")
+	}
 	m.copyString("last_refresh", object, "last_refresh")
 	m.validateClient(tokens, channel.Codex)
 	m.validateClient(object, channel.Codex)
@@ -317,6 +321,10 @@ func mapSub2API(object map[string]any, channelID channel.ID) (map[string]any, st
 	m.copyIdentity("email", []map[string]any{credentials, extra}, "email", "email_address")
 	switch channelID {
 	case channel.Codex:
+		m.copyString("plan_type", credentials, "plan_type")
+		if _, exists := m.out["plan_type"]; !exists {
+			m.copyString("plan_type", extra, "plan_type")
+		}
 		m.copyIdentity("account_id", []map[string]any{credentials, extra}, "chatgpt_account_id", "account_id")
 	case channel.Claude:
 		m.copyIdentity("account_uuid", []map[string]any{credentials, extra}, "account_uuid")

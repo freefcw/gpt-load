@@ -36,7 +36,7 @@ defineEmits<{ select: [value: boolean]; toggle: [value: boolean]; action: [value
 const { t, n, locale } = useI18n()
 const state = computed(() => credentialStatus(props.row))
 const observation = computed(() => props.row.observation)
-const plan = computed(() => observation.value?.plan.trim() ?? '')
+const plan = computed(() => observation.value?.plan.trim() || props.row.planType?.trim() || '')
 const creditLabel = computed(() => {
   const expirations = observation.value?.creditExpirations ?? []
   const available = observation.value?.resetCredits ?? 0

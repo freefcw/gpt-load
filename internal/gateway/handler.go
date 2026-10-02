@@ -95,6 +95,7 @@ type credentialMutationCoordinator interface {
 
 type runtimeCredentialRegistry interface {
 	scheduler.CredentialSource
+	ConfigurationRevision() uint64
 	CaptureActiveCredentialRefs(groupIDs []uint) []state.CredentialRef
 	CredentialRef(credentialID uint) (state.CredentialRef, bool)
 	ActiveEncryptedCredentialDataIfMatch(ref state.CredentialRef) (string, bool)
@@ -766,7 +767,7 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 		}
 	} else {
 		requestAffinity = handler.resolveRequestAffinity(
-			snapshot, accessKey.ID, selectedRoute.Protocol, metadata.AffinityPrefix, allowedCredentialRefs, metadata.PromptCacheKey,
+			snapshot, accessKey.ID, selectedRoute.Protocol, metadata.AffinityPrefix, allowedCredentialRefs, metadata.PromptCacheKey, metadata.SessionID,
 		)
 		query.PreferredCredentialID = requestAffinity.preferredCredentialID
 	}

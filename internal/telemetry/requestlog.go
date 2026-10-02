@@ -175,5 +175,7 @@ func (NoopRequestLogSink) Emit(RequestEvent) {}
 const (
 	AffinityPromptPrefix       = "prompt_prefix"
 	AffinityPromptCacheKey     = "prompt_cache_key"
+	AffinitySessionID          = "session_id"
 	AffinityResponseContinuity = "response_continuity"
+	AffinityWebsocketBinding   = "websocket_binding"
 )

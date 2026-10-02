@@ -67,6 +67,8 @@ Your application only needs one base URL and one AccessKey. Providers, accounts,
 - **Scheduling and failure isolation built in** — Multi-credential scheduling, configurable weights, retries, cooldown, blacklisting, and session affinity reduce the impact of overloaded or failing credentials.
 - **Observable, self-hosted, and simple to deploy** — Inspect health, routes, logs, usage, and cost estimates in an embedded UI backed by SQLite, MySQL, or PostgreSQL with local credential encryption.
 
+See the [routing and affinity design](docs/routing-affinity-design.md) for weighted scheduling, Codex session binding, and credential affinity behavior.
+
 ## Quick start
 
 > [!WARNING]

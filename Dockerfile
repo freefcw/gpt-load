@@ -1,6 +1,7 @@
 FROM --platform=$BUILDPLATFORM node:24.18.0-alpine3.24@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS web-builder
 
 WORKDIR /build
+ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN corepack enable \
     && corepack install --global pnpm@11.17.0
 

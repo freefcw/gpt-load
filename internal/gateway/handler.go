@@ -585,7 +585,7 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 	// 请求被并发拒绝也不回滚，与上游 429 的计费口径一致。
 	concurrencyControl := concurrencyControlRequest(ginContext.Request, selectedRoute)
 	if !concurrencyControl {
-		releaseConcurrency, concurrencyAllowed := handler.concurrency.Acquire(accessKey.ID, accessKey.ConcurrencyLimit)
+		releaseConcurrency, concurrencyAllowed := handler.acquireAccessKeyConcurrency(accessKey.ID, accessKey.ConcurrencyLimit)
 		if !concurrencyAllowed {
 			handler.completeReason(ginContext, recorder, reasonAccessKeyConcurrencyLimited)
 			return

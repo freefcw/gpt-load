@@ -93,7 +93,7 @@ func (handler *Handler) handleMistralRealtime(c *gin.Context, request *dataPlane
 		failed(reasonAccessKeyRateLimited)
 		return
 	}
-	releaseConcurrency, concurrencyAllowed := handler.concurrency.Acquire(request.accessKey.ID, request.accessKey.ConcurrencyLimit)
+	releaseConcurrency, concurrencyAllowed := handler.acquireAccessKeyConcurrency(request.accessKey.ID, request.accessKey.ConcurrencyLimit)
 	if !concurrencyAllowed {
 		failed(reasonAccessKeyConcurrencyLimited)
 		return

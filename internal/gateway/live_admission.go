@@ -11,7 +11,7 @@ type liveRequestLease struct {
 }
 
 func (handler *Handler) acquireLiveRequestLease(request *dataPlaneRequestContext) (*liveRequestLease, *reason) {
-	releaseRequest, allowed := handler.concurrency.Acquire(request.accessKey.ID, request.accessKey.ConcurrencyLimit)
+	releaseRequest, allowed := handler.acquireAccessKeyConcurrency(request.accessKey.ID, request.accessKey.ConcurrencyLimit)
 	if !allowed {
 		return nil, &reasonAccessKeyConcurrencyLimited
 	}

@@ -5,7 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v8/gptload-embedded/modelcatalog"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 )
 
 func TestCodexHTTPFixedIdentityOnImagesAndWire(t *testing.T) {
@@ -95,6 +99,24 @@ func TestCodexHTTPFixedIdentityOnImagesAndWire(t *testing.T) {
 				if got, want := captured.Get(name), test.want.Get(name); got != want {
 					t.Errorf("wire %s = %q, want %q", name, got, want)
 				}
+			}
+		})
+	}
+}
+
+func TestCodexModelReasoningLevelsUsePinnedClientSnapshot(t *testing.T) {
+	for _, modelID := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-luna"} {
+		t.Run(modelID, func(t *testing.T) {
+			info := registry.LookupModelInfo(modelID, ProviderCodex)
+			if info == nil || info.Thinking == nil {
+				t.Fatalf("model %q is missing thinking metadata", modelID)
+			}
+			want := modelcatalog.ReasoningLevels(modelID)
+			if len(want) == 0 {
+				t.Fatalf("model %q is missing pinned reasoning levels", modelID)
+			}
+			if !reflect.DeepEqual(info.Thinking.Levels, want) {
+				t.Fatalf("reasoning levels = %#v, want %#v", info.Thinking.Levels, want)
 			}
 		})
 	}

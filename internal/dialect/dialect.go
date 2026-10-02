@@ -19,10 +19,14 @@ type ParsedRequest struct {
 }
 
 type RequestMetadata struct {
-	Model                    *string
-	Stream                   bool
-	AffinityPrefix           []byte
-	PromptCacheKey           string `json:"-"`
+	Model          *string
+	Stream         bool
+	AffinityPrefix []byte
+	PromptCacheKey string `json:"-"`
+	// SessionID is an explicit client-provided session identity used only for
+	// soft account affinity. It is intentionally separate from AffinityPrefix:
+	// a prompt-derived continuity scope is not a Codex account session.
+	SessionID                string `json:"-"`
 	Operation                execution.Operation
 	RouteRequirement         execution.RouteRequirement
 	ResponsesStorePreference execution.ResponsesStorePreference

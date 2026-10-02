@@ -1135,3 +1135,214 @@ func TestCodexWSSessionFixedIdentity(t *testing.T) {
 		}
 	}
 }
+
+// wsEffortUpstream 按连接内顺序生成响应 ID，供 reasoning effort 继承用例驱动多轮会话。
+func wsEffortUpstream(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		for turn := 0; ; turn++ {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, wsCompleted(fmt.Sprintf("resp_%d", turn))); err != nil {
+				return
+			}
+		}
+	}))
+	return server
+}
+
+func TestCodexWSSessionInheritsReasoningEffort(t *testing.T) {
+	server := wsEffortUpstream(t)
+	defer server.Close()
+	session := wsTestSession(t, server.URL)
+	first, err := session.ExecuteTurn(context.Background(), json.RawMessage(
+		`{"model":"gpt-6.1-sol","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]},{"type":"configuration_update","reasoning":{"effort":"high"}}]}`,
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.AppliedReasoningEffort != "high" {
+		t.Fatalf("configuration_update effort lost: %+v", first)
+	}
+	second, err := session.ExecuteTurn(context.Background(), json.RawMessage(fmt.Sprintf(
+		`{"model":"gpt-6.1-sol","input":"continue","previous_response_id":%q}`, first.ResponseID,
+	)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.AppliedReasoningEffort != "high" {
+		t.Fatalf("reasoning effort was not inherited: %+v", second)
+	}
+}
+
+func TestCodexWSSessionOnlyTreatsReasoningChangesAsOverrides(t *testing.T) {
+	server := wsEffortUpstream(t)
+	defer server.Close()
+	session := wsTestSession(t, server.URL)
+	firstPayload, err := json.Marshal(map[string]any{
+		"model": "gpt-6.1-sol",
+		"input": []any{map[string]any{
+			"type":      "configuration_update",
+			"reasoning": map[string]any{"effort": "high"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := session.ExecuteTurn(t.Context(), firstPayload, nil)
+	if err != nil || first.AppliedReasoningEffort != "high" {
+		t.Fatalf("first turn result=%+v err=%v", first, err)
+	}
+	secondPayload, err := json.Marshal(map[string]any{
+		"model":                "gpt-6.1-sol",
+		"input":                []any{map[string]any{"type": "configuration_update", "tools": []any{}}},
+		"previous_response_id": first.ResponseID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := session.ExecuteTurn(t.Context(), secondPayload, nil)
+	if err != nil || second.AppliedReasoningEffort != "high" {
+		t.Fatalf("tools-only update changed reasoning effort: %+v err=%v", second, err)
+	}
+	thirdPayload, err := json.Marshal(map[string]any{
+		"model":                "gpt-6.1-sol",
+		"reasoning":            map[string]any{"effort": "low"},
+		"input":                "continue",
+		"previous_response_id": second.ResponseID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, err := session.ExecuteTurn(t.Context(), thirdPayload, nil)
+	if err != nil || third.AppliedReasoningEffort != "low" {
+		t.Fatalf("explicit top-level reasoning effort was ignored: %+v err=%v", third, err)
+	}
+}
+
+func TestCodexWSSessionDoesNotInheritReasoningEffort(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		model   string
+		payload func(responseID string) string
+	}{
+		{
+			name:  "model changed",
+			model: "gpt-6-sol",
+			payload: func(responseID string) string {
+				return fmt.Sprintf(`{"model":"gpt-6-sol","input":"continue","previous_response_id":%q}`, responseID)
+			},
+		},
+		{
+			name:  "previous response id mismatch",
+			model: "gpt-6.1-sol",
+			payload: func(string) string {
+				return `{"model":"gpt-6.1-sol","input":"continue","previous_response_id":"foreign"}`
+			},
+		},
+		{
+			name:  "no continuation",
+			model: "gpt-6.1-sol",
+			payload: func(string) string {
+				return `{"model":"gpt-6.1-sol","input":"continue"}`
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := wsEffortUpstream(t)
+			defer server.Close()
+			session := wsTestSession(t, server.URL)
+			first, err := session.ExecuteTurn(context.Background(), json.RawMessage(
+				`{"model":"gpt-6.1-sol","input":[{"type":"configuration_update","reasoning":{"effort":"high"}}]}`,
+			), nil)
+			if err != nil || first.AppliedReasoningEffort != "high" {
+				t.Fatalf("first turn result=%+v err=%v", first, err)
+			}
+			second, err := session.ExecuteTurn(context.Background(), json.RawMessage(test.payload(first.ResponseID)), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if second.AppliedReasoningEffort != "" {
+				t.Fatalf("reasoning effort leaked across %s: %+v", test.name, second)
+			}
+		})
+	}
+}
+
+func TestCodexWSSessionRecordsReasoningEffortWithoutUpdateSupport(t *testing.T) {
+	server := wsEffortUpstream(t)
+	defer server.Close()
+	session := wsTestSession(t, server.URL)
+	// 不支持 configuration_update 的模型显式携带 reasoning.effort 时也必须记账，与 HTTP 路径一致。
+	result, err := session.ExecuteTurn(context.Background(), json.RawMessage(
+		`{"model":"gpt-5","reasoning":{"effort":"high"},"input":"hello"}`,
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AppliedReasoningEffort != "high" {
+		t.Fatalf("explicit reasoning effort lost: %+v", result)
+	}
+}
+
+func TestCodexWSSessionReasoningInheritanceAfterFailedTurns(t *testing.T) {
+	t.Run("rejected request keeps inheritance state", func(t *testing.T) {
+		server := wsEffortUpstream(t)
+		defer server.Close()
+		session := wsTestSession(t, server.URL)
+		first, err := session.ExecuteTurn(context.Background(), json.RawMessage(
+			`{"model":"gpt-6.1-sol","input":[{"type":"configuration_update","reasoning":{"effort":"high"}}]}`,
+		), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := session.ExecuteTurn(context.Background(), json.RawMessage(
+			`{"model":"gpt-6.1-sol","stream_id":"other"}`,
+		), nil); err == nil {
+			t.Fatal("unsupported request accepted")
+		}
+		second, err := session.ExecuteTurn(context.Background(), json.RawMessage(fmt.Sprintf(
+			`{"model":"gpt-6.1-sol","input":"continue","previous_response_id":%q}`, first.ResponseID,
+		)), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if second.AppliedReasoningEffort != "high" {
+			t.Fatalf("locally rejected turn cleared inheritance state: %+v", second)
+		}
+	})
+
+	t.Run("consumer failure closes the session", func(t *testing.T) {
+		server := wsEffortUpstream(t)
+		defer server.Close()
+		session := wsTestSession(t, server.URL)
+		first, err := session.ExecuteTurn(context.Background(), json.RawMessage(
+			`{"model":"gpt-6.1-sol","input":[{"type":"configuration_update","reasoning":{"effort":"high"}}]}`,
+		), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = session.ExecuteTurn(context.Background(), json.RawMessage(fmt.Sprintf(
+			`{"model":"gpt-6.1-sol","input":"continue","previous_response_id":%q}`, first.ResponseID,
+		)), func(context.Context, json.RawMessage) error {
+			return errors.New("consumer stopped")
+		})
+		var failure *CodexWSError
+		if !errors.As(err, &failure) || failure.Code != "event_consumer_failed" {
+			t.Fatalf("consumer failure code=%v", err)
+		}
+		// 现状设计：任何上游交互失败的轮次都会使会话失效，继承状态随会话一起作废。
+		if _, err := session.ExecuteTurn(context.Background(), json.RawMessage(
+			`{"model":"gpt-6.1-sol","input":"again"}`,
+		), nil); !errors.As(err, &failure) || failure.Code != "session_closed" {
+			t.Fatalf("failed session reused: %v", err)
+		}
+	})
+}

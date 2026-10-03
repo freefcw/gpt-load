@@ -61,15 +61,22 @@ func normalizeCredentialUpdate(
 	encryptionService encryption.Service,
 ) (credentialUpdatePlan, error) {
 	var plan credentialUpdatePlan
-	if !request.Name.Set && !request.Status.Set && !request.WeightManual.Set && !request.RPMLimit.Set &&
+	if !request.Name.Set && !request.Alias.Set && !request.Status.Set && !request.WeightManual.Set && !request.RPMLimit.Set &&
 		!request.ConcurrencyLimit.Set && !request.Mark.Set && !request.MarkNote.Set &&
 		!request.CodexTurnState.Set && !request.CodexTurnStateModels.Set && !request.Proxy.Set &&
 		!request.BaseURL.Set {
 		return plan, app_errors.ErrBadRequest
 	}
-	if request.Name.Set {
-		value := strings.TrimSpace(request.Name.Value)
-		if request.Name.Null || utf8.RuneCountInString(value) > 255 || strings.ContainsFunc(value, unicode.IsControl) {
+	if request.Name.Set && request.Alias.Set && strings.TrimSpace(request.Name.Value) != strings.TrimSpace(request.Alias.Value) {
+		return plan, app_errors.ErrValidation
+	}
+	if request.Name.Set || request.Alias.Set {
+		field := request.Name
+		if !field.Set {
+			field = request.Alias
+		}
+		value := strings.TrimSpace(field.Value)
+		if field.Null || utf8.RuneCountInString(value) > 255 || strings.ContainsFunc(value, unicode.IsControl) {
 			return plan, app_errors.ErrValidation
 		}
 		plan.name, plan.nameSet = &value, true
@@ -829,6 +836,7 @@ func (s *Service) mapCredentialItem(
 		return CredentialItemResponse{}, err
 	}
 	item.Name = row.Name
+	item.Alias = row.Name
 	item.ConnectionType = string(normalizeGroupConnectionType(group.ConnectionType))
 	item.SecretVersion = row.SecretVersion
 	item.AuthState = string(row.AuthState)

@@ -29,6 +29,8 @@ type routeInspectAccessKeyResponse struct {
 }
 
 type routeInspectCredentialResponse struct {
+	Name            string                `json:"name,omitempty"`
+	Alias           string                `json:"credential_alias,omitempty"`
 	CredentialID    uint                  `json:"credential_id"`
 	Available       bool                  `json:"available"`
 	ReasonCode      *scheduler.ReasonCode `json:"reason_code"`
@@ -113,6 +115,7 @@ func (service *Service) InspectRoute(
 	if accessKey.ExpiresAtMS != nil &&
 		observation.observedAt.UnixMilli() >= *accessKey.ExpiresAtMS {
 		return mapRouteInspectResponse(
+			service,
 			observation,
 			request,
 			accessKey,
@@ -148,6 +151,7 @@ func (service *Service) InspectRoute(
 		return routeInspectResponse{}, err
 	}
 	return mapRouteInspectResponse(
+		service,
 		observation,
 		request,
 		accessKey,
@@ -164,6 +168,7 @@ func inspectRouteMetadata(clientProtocol protocol.Protocol, model string) (diale
 }
 
 func mapRouteInspectResponse(
+	service *Service,
 	observation runtimeObservation,
 	request routeInspectRequest,
 	accessKey state.AccessKeyView,
@@ -203,6 +208,7 @@ func mapRouteInspectResponse(
 			Credentials:               []routeInspectCredentialResponse{},
 		}
 		for _, credential := range group.Credentials {
+			display := service.credentialDisplay(&credential.CredentialID)
 			cooldownUntilMS, err := optionalSafeEpochMilliseconds(credential.CooldownUntil)
 			if err != nil {
 				return routeInspectResponse{}, fmt.Errorf(
@@ -211,6 +217,8 @@ func mapRouteInspectResponse(
 				)
 			}
 			groupResponse.Credentials = append(groupResponse.Credentials, routeInspectCredentialResponse{
+				Name:            display.CredentialAlias,
+				Alias:           display.CredentialAlias,
 				CredentialID:    credential.CredentialID,
 				Available:       credential.Available,
 				ReasonCode:      optionalReason(credential.Reason),

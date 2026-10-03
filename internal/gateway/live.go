@@ -329,6 +329,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 				_ = media.Close()
 			}
 		}()
+		recorder.startTiming()
 		started := recorder.beforeForward()
 		updateDebugHeaders(c.Writer.Header(), selection.Group.Name, sequence)
 		upstream, evidence := handler.liveOpener.OpenLive(setupContext, spec, upstreamOffer, sessionJSON)

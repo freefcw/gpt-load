@@ -293,6 +293,7 @@ export interface ModelCooldownDto {
 export type CredentialMark = '' | 'degraded' | 'abnormal' | 'custom'
 
 export interface CredentialItemDto {
+  credential_alias: string
   name: string
   model_cooldowns: ModelCooldownDto[]
   credential_id: number
@@ -463,6 +464,8 @@ export interface HealthRecoveryDto {
 }
 
 export interface HealthProblemCredentialDto {
+  credential_alias: string
+  credential_connection_type: string
   credential_id: number
   group_id: number
   group_name: string
@@ -516,6 +519,8 @@ export interface RuntimeHealthDto {
 }
 
 export interface HealthExpiringResetCreditDto {
+  credential_alias: string
+  credential_connection_type: string
   credential_id: number
   group_id: number
   group_name: string
@@ -524,6 +529,8 @@ export interface HealthExpiringResetCreditDto {
 }
 
 export interface HealthQuotaCredentialDto {
+  credential_alias: string
+  credential_connection_type: string
   credential_id: number
   group_id: number
   group_name: string

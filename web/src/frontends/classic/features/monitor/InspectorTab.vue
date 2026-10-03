@@ -916,6 +916,7 @@ onBeforeUnmount(() => {
                         t('monitor.inspector.credentials.columns.credential')
                       }}</span>
                       <code>#{{ credential.credential_id }}</code>
+                      <code>{{ credential.name || '#' + credential.credential_id }}</code>
                     </div>
                     <div
                       class="ledger-record-list__cell route-credential-record__status"

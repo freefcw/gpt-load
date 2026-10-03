@@ -567,6 +567,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			}
 			recorder.setAffinityHit(requiredRef != nil || selection.CredentialID == affinity.preferredCredentialID, kind)
 		}
+		recorder.startTiming()
 		started := recorder.beforeForward()
 		forwardAttempts++
 		ctx, cancel := context.WithTimeout(requestCtx, selection.Group.Timeouts.Request)

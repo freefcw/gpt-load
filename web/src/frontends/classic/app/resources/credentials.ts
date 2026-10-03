@@ -72,6 +72,7 @@ export type {
 } from '@/api/control/types'
 
 export interface CredentialPatch {
+  credential_alias?: string
   name?: string
   status?: CredentialConfiguredStatus
   weight_manual?: number | null
@@ -109,6 +110,7 @@ const credentialSummaryFields = [
   'disabled',
 ] as const
 const credentialItemFields = [
+  'credential_alias',
   'model_cooldowns',
   'credential_id',
   'name',
@@ -635,6 +637,9 @@ export function projectCredentialItem(value: unknown): CredentialItemDto {
   }
   return {
     credential_id: projectSafeInteger(record.credential_id, { minimum: 1 }),
+    credential_alias: projectString(record.credential_alias ?? record.name ?? '', {
+      allowEmpty: true,
+    }),
     name: projectString(record.name, { allowEmpty: true }),
     connection_type: connectionType,
     model_cooldowns: projectArray(record.model_cooldowns, projectModelCooldown),
@@ -756,6 +761,8 @@ export function projectCredentialCollection(value: unknown): CredentialCollectio
 function normalizePatch(patch: CredentialPatch): CredentialPatch {
   const keys = Object.keys(patch)
   const allowed = new Set([
+    'credential_alias',
+    'name',
     'status',
     'weight_manual',
     'rpm_limit',
@@ -771,6 +778,21 @@ function normalizePatch(patch: CredentialPatch): CredentialPatch {
     throw new Error('INVALID_CREDENTIAL_PATCH')
   }
   const body: CredentialPatch = {}
+  if (
+    Object.prototype.hasOwnProperty.call(patch, 'credential_alias') ||
+    Object.prototype.hasOwnProperty.call(patch, 'name')
+  ) {
+    const alias = patch.credential_alias ?? patch.name
+    if (
+      typeof alias !== 'string' ||
+      alias !== alias.trim() ||
+      [...alias].length > 255 ||
+      [...alias].some((char) => char < ' ' || char === '\u007f')
+    ) {
+      throw new Error('INVALID_CREDENTIAL_ALIAS')
+    }
+    body.credential_alias = alias
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
     body.status = projectEnum(patch.status, configuredStatuses)
   }

@@ -341,7 +341,14 @@ func (r *CredentialRegistry) ReconcileGroup(groupID uint, entries []CredentialEn
 		}
 	}
 	if r.matchesGroupLocked(groupID, entries) {
-		return false, nil
+		changed := false
+		for _, desired := range entries {
+			if existing := r.buckets[groupID][desired.ID]; existing.Name != desired.Name {
+				existing.Name = desired.Name
+				changed = true
+			}
+		}
+		return changed, nil
 	}
 
 	previous := r.buckets[groupID]
@@ -380,7 +387,7 @@ func (r *CredentialRegistry) matchesGroupLocked(groupID uint, entries []Credenti
 	}
 	for _, desired := range entries {
 		existing := current[desired.ID]
-		if existing == nil || existing.Name != desired.Name || !samePersistedCredentialConfig(*existing, desired) {
+		if existing == nil || !samePersistedCredentialConfig(*existing, desired) {
 			return false
 		}
 	}

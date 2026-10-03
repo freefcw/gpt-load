@@ -6,9 +6,10 @@ export type OutputTiming = {
   usage_state: string
 }
 
-// Average output speed is measured over the complete request lifetime. This
-// includes queueing between retries, credential rotation and reasoning time;
-// it is intentionally not a token-generation-only metric.
+// Average output speed follows the server's duration_ms contract: it starts
+// when a concrete credential is admitted and includes retry gaps, credential
+// rotation and reasoning time. It is intentionally not a client round-trip or
+// token-generation-only metric.
 export function outputTokensPerSecond(row: OutputTiming): number | null {
   const tokens = Number(row.output_tokens)
   if (

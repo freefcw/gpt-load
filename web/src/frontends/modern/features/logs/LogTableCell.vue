@@ -221,6 +221,7 @@ function fieldFilterValue(field: LogColumnId): string {
       return channel.value?.name ?? (props.channels ? t('logs.deleted') : '—')
     case 'credential_name':
       return (
+        row.credential_alias ||
         row.credential_name ||
         t(row.credential_deleted ? 'logs.deleted' : 'logs.unavailableCredential')
       )

@@ -123,10 +123,10 @@ function credentialMeta(credential: HealthProblemCredentialDto): string {
             <OverflowTooltip
               :as="RouterLink"
               class="problem-health-record__identity"
-              :content="item.credential.identity"
+              :content="item.credential.credential_alias || item.credential.identity"
               :to="groupDetailLocation(item.credential.group_id, { tab: 'credentials' })"
             >
-              {{ item.credential.identity }}
+              {{ item.credential.credential_alias || item.credential.identity }}
             </OverflowTooltip>
             <OverflowTooltip as="small" :content="credentialMeta(item.credential)">
               {{ credentialMeta(item.credential) }}
@@ -267,7 +267,9 @@ function credentialMeta(credential: HealthProblemCredentialDto): string {
                 variant="ghost"
                 size="compact"
                 :label="
-                  t('monitor.health.problems.viewLogs', { credential: item.credential.identity })
+                  t('monitor.health.problems.viewLogs', {
+                    credential: item.credential.credential_alias || item.credential.identity,
+                  })
                 "
                 @click="navigate"
               >

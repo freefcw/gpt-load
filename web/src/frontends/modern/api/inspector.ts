@@ -9,6 +9,7 @@ export interface InspectionRequest {
   access_key_id: number
 }
 export interface InspectionCredential {
+  name: string
   id: number
   available: boolean
   reason: string | null
@@ -86,6 +87,7 @@ export async function inspectRoute(
           const credential = record(value)
           return {
             id: integer(credential.credential_id, 1),
+            name: text(credential.name ?? credential.credential_alias ?? ''),
             available: boolean(credential.available),
             reason: optionalText(credential.reason_code),
             weight: integer(credential.weight),

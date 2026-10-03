@@ -184,6 +184,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 			value := reasonConcurrencyLimitExceeded
 			return nil, "", func() {}, &value
 		}
+		recorder.startTiming()
 		ref := query.AllowedCredentialRefs[selection.CredentialID]
 		conn, dialFailure, decision := handler.dialMistralRealtimeSelection(ctx, recorder, selection, ref, rawQuery, sequence)
 		if dialFailure == nil {

@@ -92,7 +92,11 @@ const display = computed(() => {
         t(row.access_key.deleted ? 'logs.deletedAccessKey' : 'logs.unavailableAccessKey')
       )
     case 'credential_name':
-      return row.credential_name || (row.credential_id ? t('logs.unavailableCredential') : '—')
+      return (
+        row.credential_alias ||
+        row.credential_name ||
+        (row.credential_id ? t('logs.unavailableCredential') : '—')
+      )
     case 'stream':
     case 'affinity_hit':
       return t(row[column] ? 'logs.yes' : 'logs.no')
@@ -186,6 +190,7 @@ const hint = computed(() => {
   <LogCredentialValue
     v-else-if="column === 'credential_name' && !table"
     :name="row.credential_name"
+    :alias="row.credential_alias"
     :group-id="row.group_id"
     :credential-id="row.credential_id"
     :deleted="row.credential_deleted"

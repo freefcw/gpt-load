@@ -665,6 +665,7 @@ function toggleAttemptErrorMessage(sequence: number): void {
             v-if="
               log.auto_decision.group_name ||
               log.auto_decision.channel_name ||
+              log.auto_decision.credential_alias ||
               log.auto_decision.credential_name ||
               log.auto_decision.credential_deleted
             "
@@ -675,7 +676,7 @@ function toggleAttemptErrorMessage(sequence: number): void {
                 decisionRouteText(
                   log.auto_decision.group_name,
                   log.auto_decision.channel_name,
-                  log.auto_decision.credential_name,
+                  log.auto_decision.credential_alias || log.auto_decision.credential_name,
                   log.auto_decision.credential_deleted,
                 )
               }}
@@ -714,7 +715,7 @@ function toggleAttemptErrorMessage(sequence: number): void {
                 :channel-id="log.channel_id"
                 :channel="finalChannel()"
                 :credential-id="log.credential_id"
-                :credential-name="log.credential_name"
+                :credential-name="log.credential_alias || log.credential_name"
                 :credential-deleted="log.credential_deleted"
                 appearance="plain"
               />
@@ -979,7 +980,7 @@ function toggleAttemptErrorMessage(sequence: number): void {
                     :channel-id="attempt.channel_id"
                     :channel="channelDefinition(attempt.channel_id)"
                     :credential-id="attempt.credential_id"
-                    :credential-name="attempt.credential_name"
+                    :credential-name="attempt.credential_alias || attempt.credential_name"
                     :credential-deleted="attempt.credential_deleted"
                     appearance="plain"
                   />

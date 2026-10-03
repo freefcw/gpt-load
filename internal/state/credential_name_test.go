@@ -17,6 +17,7 @@ func TestCredentialNameRecoveryPreservesRuntime(t *testing.T) {
 	if !registry.SetBlacklisted(entry.ID) {
 		t.Fatal("blacklist credential")
 	}
+	revision := registry.ConfigurationRevision()
 	before := registry.Snapshot()
 	entry.Name = "生产账号"
 	changed, err := registry.ReconcileGroup(entry.GroupID, []CredentialEntry{entry})
@@ -25,6 +26,9 @@ func TestCredentialNameRecoveryPreservesRuntime(t *testing.T) {
 	}
 	if !reflect.DeepEqual(before, registry.Snapshot()) {
 		t.Fatal("alias recovery changed health state")
+	}
+	if got := registry.ConfigurationRevision(); got != revision {
+		t.Fatalf("alias recovery changed configuration revision to %d, want %d", got, revision)
 	}
 	ref, ok := registry.CredentialRef(entry.ID)
 	if !ok || ref.Name != entry.Name {

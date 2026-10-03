@@ -32,6 +32,7 @@ type CredentialImportResult struct {
 }
 
 type CredentialUpdateRequest struct {
+	Alias            optionalField[string]                 `json:"credential_alias"`
 	Name             optionalField[string]                 `json:"name"`
 	Status           optionalField[state.CredentialStatus] `json:"status"`
 	WeightManual     optionalField[int]                    `json:"weight_manual"`
@@ -107,6 +108,7 @@ type CredentialAccountResponse struct {
 
 type CredentialItemResponse struct {
 	Name           string                         `json:"name"`
+	Alias          string                         `json:"credential_alias"`
 	RPMPeakHour    *int64                         `json:"-"`
 	ModelCooldowns []ModelCooldownResponse        `json:"model_cooldowns"`
 	CredentialID   uint                           `json:"credential_id"`
@@ -495,6 +497,7 @@ func (s *Service) mapCredentialCollection(
 			return CredentialCollectionResponse{}, err
 		}
 		item.Name = row.Name
+		item.Alias = row.Name
 		item.ConnectionType = string(normalizeGroupConnectionType(observation.group.ConnectionType))
 		item.SecretVersion = row.SecretVersion
 		item.AuthState = string(row.AuthState)

@@ -148,6 +148,8 @@ export interface RequestLogAttemptDto {
   group_name: string
   channel_id: string | null
   credential_id: number | null
+  credential_alias: string
+  credential_connection_type: string
   /** 凭据的可读标识（掩码）；无法取得标识不代表删除。 */
   credential_name: string
   /** 仅供前端展示，由既有名称字段推导，不属于响应字段。 */
@@ -215,6 +217,8 @@ export interface RequestLogItemDto {
   group_id: number | null
   channel_id: string | null
   credential_id: number | null
+  credential_alias: string
+  credential_connection_type: string
   /** 凭据的可读标识（掩码）；无法取得标识不代表删除。 */
   credential_name: string
   /** 仅供前端展示，由既有名称字段推导，不属于响应字段。 */
@@ -245,6 +249,8 @@ export interface AutoDecisionDto {
   provider: string
   group_name: string
   channel_name: string
+  credential_alias: string
+  credential_connection_type: string
   credential_name: string
   credential_deleted: boolean
   requested_model: string
@@ -367,6 +373,8 @@ const itemFields = [
   'group_id',
   'channel_id',
   'credential_id',
+  'credential_alias',
+  'credential_connection_type',
   'credential_name',
   'route_mode',
   'upstream_turn_state',
@@ -532,6 +540,8 @@ function projectAttempt(value: unknown): RequestLogAttemptDto {
     'group_name',
     'channel_id',
     'credential_id',
+    'credential_alias',
+    'credential_connection_type',
     'credential_name',
     'operation',
     'route_mode',
@@ -568,6 +578,10 @@ function projectAttempt(value: unknown): RequestLogAttemptDto {
       record.credential_id === null
         ? null
         : projectSafeInteger(record.credential_id, { minimum: 1 }),
+    credential_alias: projectString(record.credential_alias ?? '', { allowEmpty: true }),
+    credential_connection_type: projectString(record.credential_connection_type ?? '', {
+      allowEmpty: true,
+    }),
     credential_name: projectString(record.credential_name, { allowEmpty: true }),
     credential_deleted: record.credential_id !== null && record.credential_name === '',
     operation: record.operation === null ? null : projectEnum(record.operation, operations),
@@ -723,6 +737,10 @@ function projectItemRecord(record: Record<string, unknown>): RequestLogItemDto {
       record.credential_id === null
         ? null
         : projectSafeInteger(record.credential_id, { minimum: 1 }),
+    credential_alias: projectString(record.credential_alias ?? '', { allowEmpty: true }),
+    credential_connection_type: projectString(record.credential_connection_type ?? '', {
+      allowEmpty: true,
+    }),
     credential_name: projectString(record.credential_name, { allowEmpty: true }),
     credential_deleted: record.credential_id !== null && record.credential_name === '',
     route_mode: record.route_mode === null ? null : projectEnum(record.route_mode, routeModes),
@@ -765,6 +783,8 @@ function projectAutoDecision(value: unknown): AutoDecisionDto {
     provider: optional(row.provider),
     group_name: optional(row.group_name),
     channel_name: optional(row.channel_name),
+    credential_alias: optional(row.credential_alias),
+    credential_connection_type: optional(row.credential_connection_type),
     credential_name: optional(row.credential_name),
     credential_deleted: projectBoolean(row.credential_deleted ?? false),
     requested_model: optional(row.requested_model),

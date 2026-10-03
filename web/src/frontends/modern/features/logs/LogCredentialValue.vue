@@ -7,6 +7,7 @@ import { useApiClient } from '@shared/http/client-context'
 
 const props = defineProps<{
   name: string
+  alias?: string
   groupId: number | null
   credentialId: number | null
   deleted: boolean
@@ -18,6 +19,7 @@ const controller = new AbortController()
 onScopeDispose(() => controller.abort())
 const display = computed(
   () =>
+    props.alias ||
     props.name ||
     (props.credentialId ? t(props.deleted ? 'logs.deleted' : 'logs.unavailableCredential') : '—'),
 )

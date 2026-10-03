@@ -102,6 +102,36 @@ func TestRequestRecorderCapturesFirstResponseAfterDownstreamCommit(t *testing.T)
 	}
 }
 
+func TestRequestRecorderTimingStartsAtCredentialAdmission(t *testing.T) {
+	startedAt := time.Date(2026, time.August, 5, 8, 0, 0, 0, time.UTC)
+	times := []time.Time{
+		startedAt.Add(500 * time.Millisecond),
+		startedAt.Add(2 * time.Second),
+		startedAt.Add(3 * time.Second),
+	}
+	sink := &recordingRequestLogSink{}
+	recorder := newRequestRecorder(
+		sink,
+		"00000000-0000-4000-8000-000000000002",
+		startedAt,
+		1,
+		protocol.OpenAICompletions,
+		func() time.Time {
+			value := times[0]
+			times = times[1:]
+			return value
+		},
+	)
+	recorder.startTiming()
+	recorder.completeReason(reasonNoCandidate)
+	recorder.emit()
+
+	events := sink.snapshot()
+	if len(events) != 1 || events[0].DurationMs != 1500 {
+		t.Fatalf("timing event = %#v, want 1500ms from credential admission", events)
+	}
+}
+
 func withoutPricingReceipt(value telemetry.PricingObservation) telemetry.PricingObservation {
 	value.ReceiptJSON = ""
 	return value

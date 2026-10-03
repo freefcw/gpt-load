@@ -191,6 +191,7 @@ function filterValue(key: string, value: string): string {
   }
   if (key === 'credential_id')
     return (
+      rows.value.find((row) => String(row.credential_id) === value)?.credential_alias ||
       rows.value.find((row) => String(row.credential_id) === value)?.credential_name ||
       t('logs.selectedCredential')
     )

@@ -896,7 +896,7 @@ function logTurnStateSummary(log: RequestLogItemDto): LogTurnStateSummary {
               :channel-id="log.channel_id"
               :channel="channelDefinition(log)"
               :credential-id="log.credential_id"
-              :credential-name="log.credential_name"
+              :credential-name="log.credential_alias || log.credential_name"
               :group-deleted="groupDeleted(log)"
               :credential-deleted="log.credential_deleted"
               filterable

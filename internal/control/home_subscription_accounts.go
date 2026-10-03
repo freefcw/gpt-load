@@ -357,6 +357,8 @@ func (s *Service) mapHomeSubscriptionAccount(
 	if err != nil {
 		return HomeSubscriptionAccountResponse{}, err
 	}
+	item.Name = credential.Name
+	item.Alias = credential.Name
 	item.ConnectionType = string(models.ConnectionTypeSubscription)
 	item.SecretVersion = credential.SecretVersion
 	item.AuthState = string(credential.AuthState)

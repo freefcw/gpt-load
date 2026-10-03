@@ -469,7 +469,7 @@ func TestRouteInspectEndpointReturnsCurrentSafeExplanation(t *testing.T) {
 		},
 		{
 			ID: 21, GroupID: 1, Version: 1, IdentityGeneration: 21, Fingerprint: "test-21", Status: state.CredentialStatusActive,
-			WeightManual:   &keyWeight,
+			Name: "生产账号", WeightManual: &keyWeight,
 			EncryptedValue: "cipher-one",
 		},
 	}); err != nil {
@@ -514,7 +514,7 @@ func TestRouteInspectEndpointReturnsCurrentSafeExplanation(t *testing.T) {
 	available := primary.Credentials[0]
 	if !available.Available || available.ReasonCode != nil ||
 		available.Weight != 25 || available.EffectiveWeight != 50*25 ||
-		available.CooldownUntilMS != nil {
+		available.CooldownUntilMS != nil || available.Name != "生产账号" || available.Alias != "生产账号" {
 		t.Fatalf("available key = %#v", available)
 	}
 	cooldown := primary.Credentials[1]

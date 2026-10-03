@@ -103,7 +103,7 @@ async function save(): Promise<void> {
   attempted.value = true
   if (weightInvalid.value || proxyInvalid.value) return
   const patch: Parameters<typeof updateCredential>[3] = {}
-  if (name.value !== saved.value.name) patch.name = name.value.trim()
+  if (name.value !== saved.value.name) patch.credential_alias = name.value.trim()
   if (weight.value !== String(saved.value.weightManual ?? ''))
     patch.weight_manual = weight.value ? Number(weight.value) : null
   if (proxyChanged.value)

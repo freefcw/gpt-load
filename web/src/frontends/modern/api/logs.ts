@@ -129,6 +129,8 @@ export interface LogEntry {
   group_id: number | null
   channel_id: string | null
   credential_id: number | null
+  credential_alias: string
+  credential_connection_type: string
   credential_name: string
   // 前端内部展示标记，不读取或要求新的响应字段。
   credential_deleted: boolean
@@ -158,6 +160,8 @@ export interface LogAutoDecision {
   provider: string
   group_name: string
   channel_name: string
+  credential_alias: string
+  credential_connection_type: string
   credential_name: string
   credential_deleted: boolean
   requested_model: string
@@ -200,6 +204,8 @@ export interface LogAttempt {
   group_name: string
   channel_id: string | null
   credential_id: number | null
+  credential_alias: string
+  credential_connection_type: string
   credential_name: string
   // 前端内部展示标记，不读取或要求新的响应字段。
   credential_deleted: boolean
@@ -328,6 +334,8 @@ function entry(value: unknown): LogEntry {
     group_id: optionalNumber(row.group_id),
     channel_id: optionalText(row.channel_id),
     credential_id: optionalNumber(row.credential_id),
+    credential_alias: text(row.credential_alias ?? ''),
+    credential_connection_type: text(row.credential_connection_type ?? ''),
     credential_name: text(row.credential_name),
     credential_deleted: row.credential_id != null && row.credential_name === '',
     route_mode: optionalText(row.route_mode),
@@ -390,6 +398,8 @@ function autoDecision(value: unknown): LogAutoDecision {
     provider: text(row.provider ?? ''),
     group_name: text(row.group_name ?? ''),
     channel_name: text(row.channel_name ?? ''),
+    credential_alias: text(row.credential_alias ?? ''),
+    credential_connection_type: text(row.credential_connection_type ?? ''),
     credential_name: text(row.credential_name ?? ''),
     credential_deleted: boolean(row.credential_deleted ?? false),
     requested_model: text(row.requested_model ?? ''),
@@ -457,6 +467,8 @@ export async function getLogDetail(
         group_name: text(item.group_name),
         channel_id: optionalText(item.channel_id),
         credential_id: optionalNumber(item.credential_id),
+        credential_alias: text(item.credential_alias ?? ''),
+        credential_connection_type: text(item.credential_connection_type ?? ''),
         credential_name: text(item.credential_name),
         credential_deleted: item.credential_id != null && item.credential_name === '',
         operation: optionalText(item.operation),

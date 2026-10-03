@@ -72,6 +72,8 @@ const quotaCredentialFields = [
   'group_id',
   'group_name',
   'identity',
+  'credential_alias',
+  'credential_connection_type',
   'remaining',
   'reset_at_ms',
 ] as const
@@ -80,6 +82,8 @@ const expiringResetCreditFields = [
   'group_id',
   'group_name',
   'identity',
+  'credential_alias',
+  'credential_connection_type',
   'count',
   'nearest_expires_at_ms',
 ] as const
@@ -95,6 +99,8 @@ const problemCredentialFields = [
   'weight',
   'recovery',
   'identity',
+  'credential_alias',
+  'credential_connection_type',
   'last_failure_category',
   'last_status_code',
 ] as const
@@ -213,6 +219,10 @@ function projectProblemCredential(value: unknown): HealthProblemCredentialDto {
     credential_id: projectSafeInteger(record.credential_id, { minimum: 1 }),
     group_id: projectSafeInteger(record.group_id, { minimum: 1 }),
     group_name: projectNonBlankString(record.group_name),
+    credential_alias: projectString(record.credential_alias ?? '', { allowEmpty: true }),
+    credential_connection_type: projectString(record.credential_connection_type ?? '', {
+      allowEmpty: true,
+    }),
     cooldown_until_ms: cooldownUntilMS,
     failure_count: projectSafeInteger(record.failure_count, { minimum: 0 }),
     recent_success_count: projectSafeInteger(record.recent_success_count, { minimum: 0 }),
@@ -247,6 +257,10 @@ function projectQuotaCredential(value: unknown): HealthQuotaCredentialDto {
     credential_id: projectSafeInteger(record.credential_id, { minimum: 1 }),
     group_id: projectSafeInteger(record.group_id, { minimum: 1 }),
     group_name: projectNonBlankString(record.group_name),
+    credential_alias: projectString(record.credential_alias ?? '', { allowEmpty: true }),
+    credential_connection_type: projectString(record.credential_connection_type ?? '', {
+      allowEmpty: true,
+    }),
     remaining,
     reset_at_ms: projectEpochMilliseconds(record.reset_at_ms),
   }
@@ -259,6 +273,10 @@ function projectExpiringResetCredit(value: unknown): HealthExpiringResetCreditDt
     credential_id: projectSafeInteger(record.credential_id, { minimum: 1 }),
     group_id: projectSafeInteger(record.group_id, { minimum: 1 }),
     group_name: projectNonBlankString(record.group_name),
+    credential_alias: projectString(record.credential_alias ?? '', { allowEmpty: true }),
+    credential_connection_type: projectString(record.credential_connection_type ?? '', {
+      allowEmpty: true,
+    }),
     count: projectSafeInteger(record.count, { minimum: 1 }),
     nearest_expires_at_ms: projectEpochMilliseconds(record.nearest_expires_at_ms),
   }

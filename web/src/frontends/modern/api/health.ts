@@ -19,6 +19,8 @@ export interface HealthCredential {
   groupID: number
   groupName: string
   identity: string
+  alias: string
+  connectionType: string
   failureCategory: string
   statusCode: number | null
   failures: number
@@ -34,6 +36,8 @@ export interface HealthQuota {
   groupID: number
   groupName: string
   identity: string
+  alias: string
+  connectionType: string
   remaining: number
   resetAt: number | null
 }
@@ -42,6 +46,8 @@ export interface HealthCredit {
   groupID: number
   groupName: string
   identity: string
+  alias: string
+  connectionType: string
   count: number
   expiresAt: number
 }
@@ -74,6 +80,7 @@ export interface HealthReport {
   accessKeys: HealthAccessKey[]
 }
 const timestamp = (value: unknown) => (value == null ? null : integer(value))
+const optionalText = (value: unknown) => (value == null ? '' : text(value))
 // 无邮箱兜底中的数据库 ID 不进入新版展示。
 const identity = (value: unknown) => text(value).replace(/^Subscription #\d+$/, '')
 function counts(value: unknown): HealthCounts {
@@ -96,6 +103,8 @@ function credential(value: unknown): HealthCredential {
     groupID: integer(row.group_id, 1),
     groupName: text(row.group_name),
     identity: identity(row.identity),
+    alias: optionalText(row.credential_alias),
+    connectionType: optionalText(row.credential_connection_type),
     failureCategory: text(row.last_failure_category),
     statusCode: timestamp(row.last_status_code),
     failures: integer(row.failure_count),
@@ -150,6 +159,8 @@ export async function getHealth(client: ApiClient, signal: AbortSignal): Promise
         groupID: integer(item.group_id, 1),
         groupName: text(item.group_name),
         identity: identity(item.identity),
+        alias: optionalText(item.credential_alias),
+        connectionType: optionalText(item.credential_connection_type),
         remaining: item.remaining,
         resetAt: timestamp(item.reset_at_ms),
       }
@@ -161,6 +172,8 @@ export async function getHealth(client: ApiClient, signal: AbortSignal): Promise
         groupID: integer(item.group_id, 1),
         groupName: text(item.group_name),
         identity: identity(item.identity),
+        alias: optionalText(item.credential_alias),
+        connectionType: optionalText(item.credential_connection_type),
         count: integer(item.count, 1),
         expiresAt: integer(item.nearest_expires_at_ms),
       }

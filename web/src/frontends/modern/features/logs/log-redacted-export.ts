@@ -147,6 +147,9 @@ export async function createRedactedLogExport(log: LogDetail): Promise<string> {
         ...log.auto_decision,
         receipt: await redactReceipt(log.auto_decision.receipt),
         group_name: (await identityReference('group', null, log.auto_decision.group_name)) ?? '',
+        credential_alias: log.auto_decision.credential_alias
+          ? await anonymousReference('credential_alias', log.auto_decision.credential_alias)
+          : '',
         credential_name:
           (await identityReference('credential', null, log.auto_decision.credential_name)) ?? '',
       }
@@ -168,6 +171,9 @@ export async function createRedactedLogExport(log: LogDetail): Promise<string> {
         group_id: attemptGroupReference,
         group_name: attemptGroupReference,
         credential_id: attemptCredentialReference,
+        credential_alias: attempt.credential_alias
+          ? await anonymousReference('credential_alias', attempt.credential_alias)
+          : '',
         credential_name: attemptCredentialReference,
         upstream_request_id: attempt.upstream_request_id
           ? await anonymousReference('upstream_request', attempt.upstream_request_id)
@@ -192,6 +198,7 @@ export async function createRedactedLogExport(log: LogDetail): Promise<string> {
           'access key',
           'group',
           'credential',
+          'credential alias',
           'upstream request',
           'routing rule and scope',
           'known secrets and network identifiers in diagnostic text',
@@ -206,6 +213,9 @@ export async function createRedactedLogExport(log: LogDetail): Promise<string> {
         },
         group_id: groupReference,
         credential_id: credentialReference,
+        credential_alias: log.credential_alias
+          ? await anonymousReference('credential_alias', log.credential_alias)
+          : '',
         credential_name: credentialReference,
         auto_decision: decision,
         error_summary: await redactDiagnosticText(log.error_summary),

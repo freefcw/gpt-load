@@ -1428,6 +1428,15 @@ func TestCredentialLabelsMasksFromRegistryWithoutDatabaseReads(t *testing.T) {
 	if err := fixture.db.Where("group_id = ?", created.GroupID).Take(&credential).Error; err != nil {
 		t.Fatal(err)
 	}
+	updated, err := fixture.service.UpdateGroupCredential(t.Context(), created.GroupID, credential.ID, CredentialUpdateRequest{
+		Alias: optionalField[string]{Set: true, Value: "生产账号"},
+	})
+	if err != nil {
+		t.Fatalf("set credential alias: %v", err)
+	}
+	if updated.Name != "生产账号" || updated.Alias != "生产账号" {
+		t.Fatalf("updated credential alias = %#v", updated)
+	}
 
 	queries := 0
 	const callbackName = "test:credential_labels_no_db"
@@ -1451,6 +1460,16 @@ func TestCredentialLabelsMasksFromRegistryWithoutDatabaseReads(t *testing.T) {
 	}
 	if want := utils.MaskAPIKey("sk-log-label-abcdefghijklmnop"); label != want {
 		t.Fatalf("label = %q, want %q", label, want)
+	}
+	display := fixture.service.credentialDisplay(&credential.ID)
+	if display.CredentialAlias != "生产账号" || display.CredentialConnectionType != string(models.ConnectionTypeAPIKey) {
+		t.Fatalf("credential display = %#v", display)
+	}
+	credentialID := credential.ID
+	item := requestLogItemResponse{CredentialID: &credentialID}
+	fixture.service.decorateRequestLogCredential(&item, 0)
+	if item.CredentialAlias != "生产账号" || item.CredentialName != "" {
+		t.Fatalf("request log display = %#v", item.credentialDisplayResponse)
 	}
 	if _, exists := labels[9_999]; exists {
 		t.Fatalf("unknown credential should be absent, got %q", labels[9_999])

@@ -7,10 +7,28 @@ import (
 	"testing"
 	"time"
 
+	"gpt-load/internal/platform/utils"
 	"gpt-load/internal/state"
 )
 
 type testHasher struct{}
+
+func TestAuthenticateUsesResolvedClientIP(t *testing.T) {
+	resolver, err := utils.NewClientIPResolver("X-Forwarded-For", []string{"192.0.2.0/24"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := &state.ConfigSnapshot{AccessKeysByHash: map[string]state.AccessKeyView{
+		"hash:valid": {ID: 7, AllowedPeerCIDRs: []netip.Prefix{netip.MustParsePrefix("2001:db8::/32")}},
+	}}
+	request := resolver.Apply(&http.Request{
+		Header: http.Header{"Authorization": {"Bearer valid"}, "X-Forwarded-For": {"198.51.100.9, 2001:db8::1, 192.0.2.11"}},
+		URL:    &url.URL{}, RemoteAddr: "192.0.2.10:1234",
+	})
+	if _, ok, reason := authenticate(request, snapshot, testHasher{}, time.Now()); !ok || reason != "" {
+		t.Fatalf("authenticate() = (%t, %q), want resolved client IP accepted", ok, reason)
+	}
+}
 
 func (testHasher) Hash(value string) string { return "hash:" + value }
 

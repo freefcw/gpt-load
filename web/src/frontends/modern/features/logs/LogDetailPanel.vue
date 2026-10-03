@@ -376,6 +376,7 @@ function resolveRedactedLog(): Promise<string> {
                 v-if="
                   log.auto_decision.group_name ||
                   log.auto_decision.channel_name ||
+                  log.auto_decision.credential_alias ||
                   log.auto_decision.credential_name ||
                   log.auto_decision.credential_deleted
                 "
@@ -386,7 +387,7 @@ function resolveRedactedLog(): Promise<string> {
                     decisionRouteText(
                       log.auto_decision.group_name,
                       log.auto_decision.channel_name,
-                      log.auto_decision.credential_name,
+                      log.auto_decision.credential_alias || log.auto_decision.credential_name,
                       log.auto_decision.credential_deleted,
                     )
                   }}
@@ -501,7 +502,7 @@ function resolveRedactedLog(): Promise<string> {
                 </div>
                 <div class="modern-log-attempt-route">
                   <LogCredentialValue
-                    :name="attempt.credential_name"
+                    :name="attempt.credential_alias || attempt.credential_name"
                     :group-id="attempt.group_id"
                     :credential-id="attempt.credential_id"
                     :deleted="attempt.credential_deleted"

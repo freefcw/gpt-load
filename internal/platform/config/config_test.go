@@ -51,6 +51,28 @@ func TestLoadUsesDefaultConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadReadsWebDistDir(t *testing.T) {
+	clearEnvironment(t)
+	t.Setenv("AUTH_KEY", "test-auth-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.WebDistDir != "" {
+		t.Fatalf("WebDistDir = %q, want empty default", cfg.WebDistDir)
+	}
+
+	t.Setenv("WEB_DIST_DIR", " /srv/gpt-load-web-dist ")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.WebDistDir != "/srv/gpt-load-web-dist" {
+		t.Fatalf("WebDistDir = %q, want trimmed /srv/gpt-load-web-dist", cfg.WebDistDir)
+	}
+}
+
 func TestLoadPreservesExplicitAllInterfacesHost(t *testing.T) {
 	clearEnvironment(t)
 	t.Setenv("AUTH_KEY", "test-auth-key")
@@ -517,7 +539,7 @@ func clearEnvironment(t *testing.T) {
 	t.Helper()
 	t.Chdir(t.TempDir())
 	for _, key := range []string{
-		"HOST", "PORT", "DATA_DIR", "DATABASE_DSN", "ENCRYPTION_KEY", "AUTH_KEY",
+		"HOST", "PORT", "WEB_DIST_DIR", "DATA_DIR", "DATABASE_DSN", "ENCRYPTION_KEY", "AUTH_KEY",
 		"LOG_LEVEL", "LOG_FORMAT", "GRACEFUL_SHUTDOWN_TIMEOUT",
 		"READ_TIMEOUT", "IDLE_TIMEOUT", "MODELS_DEV_AUTO_SYNC_ENABLED",
 		"DATABASE_MAX_OPEN_CONNECTIONS", "DATABASE_MAX_IDLE_CONNECTIONS",

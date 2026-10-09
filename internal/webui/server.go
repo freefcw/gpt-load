@@ -1,16 +1,20 @@
-// Package webui serves the embedded management UI on explicit page routes.
+// Package webui serves the management UI on explicit page routes.
 package webui
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"mime"
 	"net/http"
+	"os"
 	"path"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"gpt-load/internal/platform/config"
 )
 
 const (
@@ -38,17 +42,56 @@ var embeddedFiles embed.FS
 type Server struct {
 	files fs.FS
 	root  string
+	// index caches the embedded SPA entry point; nil reads it from files per
+	// request so an external dist directory stays replaceable without a
+	// restart. A nil index marks that lazy (external) mode: failing to read
+	// it at request time answers 500 instead of the compile-time fallback,
+	// which would wrongly tell the operator to run "make build".
 	index []byte
 	pages []pageRoute
 }
 
-// NewServer creates an embedded UI server.
-func NewServer() (*Server, error) {
+// NewServer creates the UI server. A non-empty WEB_DIST_DIR serves that dist
+// directory instead of the embedded build.
+func NewServer(cfg *config.Config) (*Server, error) {
 	pages, err := loadPageRoutes()
 	if err != nil {
 		return nil, err
 	}
+	if cfg.WebDistDir != "" {
+		return newExternalServer(cfg.WebDistDir, pages)
+	}
 	return newServerWithPages(embeddedFiles, distRoot, pages), nil
+}
+
+// newExternalServer serves an operator-provided dist directory. An invalid
+// directory fails startup instead of silently falling back to the embedded UI.
+// index.html is read per request on purpose: the extra stat+read on every
+// page hit is the accepted cost of replacing dist files without a restart.
+// Do not cache it without revisiting that contract.
+func newExternalServer(dir string, pages []pageRoute) (*Server, error) {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return nil, fmt.Errorf("WEB_DIST_DIR: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("WEB_DIST_DIR %q is not a directory", dir)
+	}
+	files := os.DirFS(dir)
+	if _, err := fs.Stat(files, "index.html"); err != nil {
+		return nil, fmt.Errorf("WEB_DIST_DIR %q does not contain index.html: %w", dir, err)
+	}
+	return &Server{
+		files: files,
+		root:  ".",
+		pages: clonePages(pages),
+	}, nil
+}
+
+// clonePages defensively copies route descriptors so later mutations by the
+// caller cannot leak into an already-built server.
+func clonePages(pages []pageRoute) []pageRoute {
+	return append([]pageRoute(nil), pages...)
 }
 
 func newServer(files fs.FS, root string) *Server {
@@ -69,7 +112,7 @@ func newServerWithPages(files fs.FS, root string, pages []pageRoute) *Server {
 		files: files,
 		root:  root,
 		index: index,
-		pages: append([]pageRoute(nil), pages...),
+		pages: clonePages(pages),
 	}
 }
 
@@ -99,11 +142,28 @@ func (s *Server) serveNotFoundIndex(c *gin.Context) {
 }
 
 func (s *Server) serveIndexWithStatus(c *gin.Context, status int) {
+	index := s.index
+	if index == nil {
+		// Lazy (external) mode only: constructors for embedded servers always
+		// populate index. A read failure here means the dist directory broke at
+		// runtime; fail loudly instead of silently serving the compile-time
+		// fallback, matching the documented no-silent-fallback contract.
+		content, err := fs.ReadFile(s.files, path.Join(s.root, "index.html"))
+		if err != nil {
+			c.Header("Cache-Control", "no-cache")
+			c.Header("Content-Security-Policy", "default-src 'none'")
+			c.Header("X-Content-Type-Options", "nosniff")
+			c.String(http.StatusInternalServerError, "index.html unreadable: %v", err)
+			return
+		}
+		index = content
+	}
+
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Content-Security-Policy", indexCSP)
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("X-Frame-Options", "DENY")
-	c.Data(status, "text/html; charset=utf-8", s.index)
+	c.Data(status, "text/html; charset=utf-8", index)
 }
 
 func (s *Server) serveThemeBootstrap(c *gin.Context) {

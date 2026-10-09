@@ -43,6 +43,7 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 		Operation:        execution.OperationDecisionsCreate,
 		RouteRequirement: execution.RouteRequirementNative,
 		ExternalModel:    &model,
+		Limiter:          handler.credentialLimiter,
 	}
 	if config.GroupID != 0 {
 		query.AccessKey.Filters.Groups = map[uint]struct{}{config.GroupID: {}}
@@ -144,7 +145,14 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 		decision.Reason = failure.Code
 		return decision, result
 	}
+	releaseCredential, acquired := handler.acquireCredentialSlot(selection)
+	if !acquired {
+		release()
+		decision.Reason = "no_candidate"
+		return decision, result
+	}
 	defer release()
+	defer releaseCredential()
 	frozenPricing := handler.freezeAttemptPricing(selection, metadata, true, key.PriceMultiplier)
 	result = handler.forwarder.Forward(decisionCtx, ForwardInput{
 		Dialect: decisionDialect, ObserveUsage: true,

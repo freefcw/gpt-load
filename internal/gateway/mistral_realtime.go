@@ -153,6 +153,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 		ExternalModel:         &model,
 		AccessKey:             request.accessKey,
 		AllowedCredentialRefs: map[uint]state.CredentialRef{},
+		Limiter:               handler.credentialLimiter,
 	}
 	groups := scheduler.CandidateGroupIDsForQuery(request.snapshot, query)
 	for _, ref := range handler.registry.CaptureActiveCredentialRefs(groups) {
@@ -183,18 +184,25 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 		if rejection != nil {
 			return nil, "", nil, rejection
 		}
+		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
+		if !acquired {
+			releaseGroup()
+			value := reasonNoCandidate
+			return nil, "", nil, &value
+		}
+		release := func() { releaseGroup(); releaseCredential() }
 		transferred := false
 		defer func() {
 			if !transferred {
-				releaseGroup()
+				release()
 			}
 		}()
 		conn, dialFailure, decision := handler.dialMistralRealtimeSelection(ctx, recorder, selection, ref, rawQuery, sequence)
 		if dialFailure == nil {
 			transferred = true
-			return conn, *selection.UpstreamModelID, releaseGroup, nil
+			return conn, *selection.UpstreamModelID, release, nil
 		}
-		releaseGroup()
+		release()
 		failure = *dialFailure
 		if !decision.CooldownUntil.IsZero() {
 			cooldownUntil = decision.CooldownUntil

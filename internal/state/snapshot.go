@@ -45,20 +45,22 @@ type CompileInput struct {
 }
 
 type GroupConfig struct {
-	Priority           int32
-	PriceMultiplier    *pricing.PriceMultiplier
-	ID                 uint
-	Name               string
-	ChannelID          channel.ID
-	ConnectionType     string
-	Params             json.RawMessage
-	ValidationProtocol protocol.Protocol
-	ValidationModel    string
-	Models             []ModelConfig
-	Settings           config.Settings
-	WeightManual       *int
-	Enabled            bool
-	Proxy              *outboundproxy.Config
+	Priority                   int32
+	PriceMultiplier            *pricing.PriceMultiplier
+	ID                         uint
+	Name                       string
+	ChannelID                  channel.ID
+	ConnectionType             string
+	Params                     json.RawMessage
+	ValidationProtocol         protocol.Protocol
+	ValidationModel            string
+	Models                     []ModelConfig
+	Settings                   config.Settings
+	WeightManual               *int
+	CredentialRPMLimit         int64
+	CredentialConcurrencyLimit int64
+	Enabled                    bool
+	Proxy                      *outboundproxy.Config
 }
 
 // CredentialConfig contains only non-secret credential metadata required to
@@ -68,6 +70,8 @@ type CredentialConfig struct {
 	GroupID            uint
 	Status             CredentialStatus
 	WeightManual       *int
+	RPMLimit           int64
+	ConcurrencyLimit   int64
 	Version            uint64
 	IdentityGeneration uint64
 	Fingerprint        string
@@ -153,30 +157,32 @@ func (rules HeaderRules) ConfiguredNames() []string {
 }
 
 type GroupView struct {
-	ErrorRules                health.ErrorRules
-	Priority                  int32
-	ConcurrencyLimit          int64
-	PriceMultiplier           pricing.PriceMultiplier
-	ID                        uint
-	Name                      string
-	ChannelID                 channel.ID
-	ConnectionType            string
-	Params                    json.RawMessage
-	ResolvedTarget            channel.ResolvedTarget
-	ValidationProtocol        protocol.Protocol
-	ValidationModel           string
-	ClientProtocols           []protocol.Protocol
-	Models                    []ModelConfig
-	Timeouts                  TimeoutConfig
-	HeaderRules               HeaderRules
-	BlacklistThreshold        int
-	AffinityEnabled           bool
-	CodexLiveMode             CodexLiveMode
-	ResponsesWebsocketEnabled bool
-	EmptyResponseRetry        bool
-	WeightManual              *int
-	Proxy                     outboundproxy.Effective
-	ParameterOverrides        parameteroverride.Rules
+	ErrorRules                 health.ErrorRules
+	Priority                   int32
+	ConcurrencyLimit           int64
+	PriceMultiplier            pricing.PriceMultiplier
+	ID                         uint
+	Name                       string
+	ChannelID                  channel.ID
+	ConnectionType             string
+	CredentialRPMLimit         int64
+	CredentialConcurrencyLimit int64
+	Params                     json.RawMessage
+	ResolvedTarget             channel.ResolvedTarget
+	ValidationProtocol         protocol.Protocol
+	ValidationModel            string
+	ClientProtocols            []protocol.Protocol
+	Models                     []ModelConfig
+	Timeouts                   TimeoutConfig
+	HeaderRules                HeaderRules
+	BlacklistThreshold         int
+	AffinityEnabled            bool
+	CodexLiveMode              CodexLiveMode
+	ResponsesWebsocketEnabled  bool
+	EmptyResponseRetry         bool
+	WeightManual               *int
+	Proxy                      outboundproxy.Effective
+	ParameterOverrides         parameteroverride.Rules
 }
 
 type GroupCatalogView struct {
@@ -353,26 +359,28 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 		}
 
 		view := GroupView{
-			ErrorRules:                resolved.ErrorRules,
-			Priority:                  group.Priority,
-			PriceMultiplier:           resolvePriceMultiplier(group.PriceMultiplier),
-			ID:                        group.ID,
-			Name:                      group.Name,
-			ValidationProtocol:        group.ValidationProtocol,
-			ValidationModel:           strings.TrimSpace(group.ValidationModel),
-			Models:                    append([]ModelConfig(nil), group.Models...),
-			Timeouts:                  resolved.Timeouts,
-			HeaderRules:               resolved.HeaderRules,
-			BlacklistThreshold:        resolved.BlacklistThreshold,
-			AffinityEnabled:           resolved.AffinityEnabled,
-			CodexLiveMode:             resolved.CodexLiveMode,
-			ResponsesWebsocketEnabled: resolved.ResponsesWebsocketEnabled,
-			EmptyResponseRetry:        resolved.EmptyResponseRetry,
-			ConcurrencyLimit:          resolved.ConcurrencyLimit,
-			WeightManual:              cloneWeight(group.WeightManual),
-			ConnectionType:            connection.Normalize(group.ConnectionType),
-			Proxy:                     groupProxy,
-			ParameterOverrides:        resolved.ParameterOverrides,
+			ErrorRules:                 resolved.ErrorRules,
+			Priority:                   group.Priority,
+			PriceMultiplier:            resolvePriceMultiplier(group.PriceMultiplier),
+			ID:                         group.ID,
+			Name:                       group.Name,
+			ValidationProtocol:         group.ValidationProtocol,
+			ValidationModel:            strings.TrimSpace(group.ValidationModel),
+			Models:                     append([]ModelConfig(nil), group.Models...),
+			Timeouts:                   resolved.Timeouts,
+			HeaderRules:                resolved.HeaderRules,
+			BlacklistThreshold:         resolved.BlacklistThreshold,
+			AffinityEnabled:            resolved.AffinityEnabled,
+			CodexLiveMode:              resolved.CodexLiveMode,
+			ResponsesWebsocketEnabled:  resolved.ResponsesWebsocketEnabled,
+			EmptyResponseRetry:         resolved.EmptyResponseRetry,
+			ConcurrencyLimit:           resolved.ConcurrencyLimit,
+			CredentialRPMLimit:         group.CredentialRPMLimit,
+			CredentialConcurrencyLimit: group.CredentialConcurrencyLimit,
+			WeightManual:               cloneWeight(group.WeightManual),
+			ConnectionType:             connection.Normalize(group.ConnectionType),
+			Proxy:                      groupProxy,
+			ParameterOverrides:         resolved.ParameterOverrides,
 		}
 		params, err := input.ChannelRegistry.ValidateParams(group.ChannelID, group.Params)
 		if err != nil {

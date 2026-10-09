@@ -106,6 +106,7 @@ type Handler struct {
 	stats               *health.StatsStore
 	mutations           credentialMutationCoordinator
 	limiter             AccessKeyRPMLimiter
+	credentialLimiter   credentialSlotLimiter
 	requestLogSink      telemetry.RequestLogSink
 	priceTables         PriceTableProvider
 	accessQuota         *accessquota.Runtime
@@ -260,6 +261,29 @@ type unlimitedAccessKeyRPMLimiter struct{}
 
 func (unlimitedAccessKeyRPMLimiter) Allow(uint, int64) ratelimit.LimitDecision {
 	return ratelimit.LimitDecision{Allowed: true}
+}
+
+// credentialSlotLimiter 同时服务调度过滤（Available）和名额扣减（Acquire）。
+// release 只归还并发，RPM 不回滚。
+type credentialSlotLimiter interface {
+	scheduler.CredentialLimiter
+	Acquire(credentialID uint, rpmLimit, concurrencyLimit int64) (release func(), allowed bool)
+}
+
+type unlimitedCredentialLimiter struct{}
+
+func (unlimitedCredentialLimiter) Available(uint, int64, int64) bool { return true }
+
+func (unlimitedCredentialLimiter) Acquire(uint, int64, int64) (func(), bool) {
+	return func() {}, true
+}
+
+func (handler *Handler) acquireCredentialSlot(selection scheduler.Selection) (func(), bool) {
+	limiter := handler.credentialLimiter
+	if limiter == nil {
+		limiter = unlimitedCredentialLimiter{}
+	}
+	return limiter.Acquire(selection.CredentialID, selection.CredentialRPMLimit, selection.CredentialConcurrencyLimit)
 }
 
 type requestAccessQuotaAdmission struct {
@@ -701,6 +725,7 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 	}
 	query.AllowedCredentialIDs = allowedCredentialIDs
 	query.AllowedCredentialRefs = allowedCredentialRefs
+	query.Limiter = handler.credentialLimiter
 	var requestAffinity requestAffinity
 	if metadata.PreviousResponseID != "" {
 		binding, found := handler.responseBindings.Lookup(accessKey.ID, metadata.PreviousResponseID)
@@ -1284,8 +1309,16 @@ func (handler *Handler) executeAttempts(
 				return
 			}
 		}
+		// 凭据本地名额在调度后立即扣减。调度器已过滤满额凭据，这里仍可能因并发竞争失败，
+		// 失败视同该候选不可用，换下一条凭据。RPM 不回滚，并发随请求结束归还。
+		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
+		if !acquired {
+			releaseGroup()
+			continue
+		}
 		// 异常退出也收尾；普通路径在本次执行结束后立即归还，幂等保护防止重复释放。
 		defer releaseGroup()
+		defer releaseCredential()
 		attemptSequence++
 		forwardAttempts++
 		if attemptSequence == 1 && (originalMetadata.PreviousResponseID != "" ||

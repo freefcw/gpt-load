@@ -220,7 +220,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 	defer handler.liveSessions.release()
 	query := scheduler.Query{ClientProtocol: protocol.CodexLive, Operation: execution.OperationLiveCall,
 		RouteRequirement: execution.RouteRequirementNative, ExternalModel: &model, AccessKey: request.accessKey,
-		AllowedCredentialRefs: make(map[uint]state.CredentialRef)}
+		AllowedCredentialRefs: make(map[uint]state.CredentialRef), Limiter: handler.credentialLimiter}
 	groups := scheduler.CandidateGroupIDsForQuery(request.snapshot, query)
 	for _, ref := range handler.registry.CaptureActiveCredentialRefs(groups) {
 		query.AllowedCredentialRefs[ref.ID] = ref
@@ -310,13 +310,20 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 			failed(*groupFailure)
 			return
 		}
+		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
+		if !acquired {
+			releaseGroup()
+			failed(reasonNoCandidate)
+			return
+		}
 		groupTransferred := false
 		defer func() {
 			if !groupTransferred {
 				releaseGroup()
+				releaseCredential()
 			}
 		}()
-		releaseConcurrency := func() { releaseGroup(); releaseRequest() }
+		releaseConcurrency := func() { releaseGroup(); releaseCredential(); releaseRequest() }
 		var media *liveMediaSession
 		upstreamOffer := offer
 		if selection.Group.CodexLiveMode == state.CodexLiveRelay {
@@ -388,6 +395,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 				iterator.SkipGroup(selection.GroupID)
 			}
 			iterator.AdvancePriority(selection)
+			releaseCredential()
 			if decision.Retry == health.RetryRefreshCredential && !refreshUsed {
 				refreshUsed = true
 				refreshSelection = &selection

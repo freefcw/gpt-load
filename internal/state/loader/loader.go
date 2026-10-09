@@ -792,19 +792,21 @@ func mapSystemAndGroups(
 			return state.CompileInput{}, fmt.Errorf("group %d: %w", row.ID, err)
 		}
 		group := state.GroupConfig{
-			PriceMultiplier:    &multiplier,
-			ID:                 row.ID,
-			Name:               row.Name,
-			ChannelID:          channel.ID(row.ChannelID),
-			ConnectionType:     string(row.ConnectionType),
-			Params:             append(json.RawMessage(nil), row.Params...),
-			ValidationProtocol: protocol.Protocol(stringValue(row.ValidationProtocol)),
-			ValidationModel:    validationModel,
-			Models:             runtimeModels,
-			Settings:           settings,
-			Priority:           row.Priority,
-			WeightManual:       cloneWeight(row.WeightManual),
-			Enabled:            row.Enabled,
+			PriceMultiplier:            &multiplier,
+			ID:                         row.ID,
+			Name:                       row.Name,
+			ChannelID:                  channel.ID(row.ChannelID),
+			ConnectionType:             string(row.ConnectionType),
+			Params:                     append(json.RawMessage(nil), row.Params...),
+			ValidationProtocol:         protocol.Protocol(stringValue(row.ValidationProtocol)),
+			ValidationModel:            validationModel,
+			Models:                     runtimeModels,
+			Settings:                   settings,
+			Priority:                   row.Priority,
+			CredentialRPMLimit:         row.CredentialRPMLimit,
+			CredentialConcurrencyLimit: row.CredentialConcurrencyLimit,
+			WeightManual:               cloneWeight(row.WeightManual),
+			Enabled:                    row.Enabled,
 		}
 		if row.ProxyConfig != nil {
 			proxy, err := decodePersistedProxy(*row.ProxyConfig, encryptionService)
@@ -924,6 +926,7 @@ func mapCredentialConfigs(
 		target := targets[row.GroupID]
 		result = append(result, state.CredentialConfig{
 			ID: row.ID, GroupID: row.GroupID, WeightManual: cloneWeight(row.WeightManual),
+			RPMLimit: row.RPMLimit, ConcurrencyLimit: row.ConcurrencyLimit,
 			Status:  state.CredentialStatus(row.Status),
 			Version: credentialVersion(row.SecretVersion),
 			IdentityGeneration: CredentialIdentityGeneration(
@@ -954,6 +957,7 @@ func mapCredentials(rows []models.Credential, groups []models.Group) []state.Cre
 				target.params,
 			),
 			Fingerprint: row.Fingerprint, WeightManual: cloneWeight(row.WeightManual),
+			RPMLimit: row.RPMLimit, ConcurrencyLimit: row.ConcurrencyLimit,
 			Status: state.CredentialStatus(row.Status), AuthState: state.CredentialAuthState(row.AuthState), EncryptedValue: row.Data,
 		})
 	}

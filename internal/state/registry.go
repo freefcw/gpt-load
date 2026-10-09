@@ -35,6 +35,8 @@ type CredentialEntry struct {
 	IdentityGeneration      uint64
 	Fingerprint             string
 	WeightManual            *int
+	RPMLimit                int64
+	ConcurrencyLimit        int64
 	Status                  CredentialStatus
 	AuthState               CredentialAuthState
 	CooldownUntil           time.Time
@@ -56,6 +58,8 @@ type CredentialMeta struct {
 	Version            uint64
 	IdentityGeneration uint64
 	WeightManual       *int
+	RPMLimit           int64
+	ConcurrencyLimit   int64
 	ModelCooldowns     map[string]time.Time
 }
 
@@ -729,8 +733,10 @@ func (r *CredentialRegistry) collectCredentialCandidatesLocked(groupIDs []uint, 
 			meta := CredentialMeta{
 				ID: view.ID, GroupID: view.GroupID,
 				Version: view.Version, IdentityGeneration: view.IdentityGeneration,
-				WeightManual:   cloneWeight(view.WeightManual),
-				ModelCooldowns: view.ModelCooldowns,
+				WeightManual:     cloneWeight(view.WeightManual),
+				RPMLimit:         view.RPMLimit,
+				ConcurrencyLimit: view.ConcurrencyLimit,
+				ModelCooldowns:   view.ModelCooldowns,
 			}
 			metas = append(metas, meta)
 		}

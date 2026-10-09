@@ -30,9 +30,17 @@ type Query struct {
 	AllowedCredentialIDs     map[uint]struct{}
 	PreferredCredentialID    uint
 	AllowedCredentialRefs    map[uint]state.CredentialRef
+	// Limiter 为 nil 时不做凭据本地限额过滤。
+	Limiter CredentialLimiter
 
 	// ResponsesWebsocket 非 nil 时按原生 WS 合同准入，不要求 HTTP 资源接口。
 	ResponsesWebsocket *execution.WebsocketCapabilities
+}
+
+// CredentialLimiter 是凭据本地 RPM/并发限额的只读探针。
+// 名额扣减由网关在拿到 Selection 后立即完成，调度器只负责把满额凭据排除出候选池。
+type CredentialLimiter interface {
+	Available(credentialID uint, rpmLimit, concurrencyLimit int64) bool
 }
 
 type Selection struct {
@@ -44,6 +52,9 @@ type Selection struct {
 	UpstreamModelID          *string
 	Group                    state.GroupView
 	ResponsesStoreDowngraded bool
+	// 解析后的凭据本地限额，网关据此在调度后立即扣减名额。0 表示不限。
+	CredentialRPMLimit         int64
+	CredentialConcurrencyLimit int64
 }
 
 type candidateTarget struct {
@@ -79,6 +90,7 @@ type Iterator struct {
 	skippedGroups         map[uint]struct{}
 	allowedCredentialRefs map[uint]credentialIdentity
 	staticReason          ReasonCode
+	limiter               CredentialLimiter
 	now                   func() time.Time
 }
 
@@ -140,6 +152,7 @@ func newWithClock(
 		routeModeTiers:        [][]channel.RouteMode{{channel.RouteNative}, {channel.RouteConverted}},
 		allowedCredentialIDs:  cloneAllowedCredentialIDs(query),
 		preferredCredentialID: query.PreferredCredentialID,
+		limiter:               query.Limiter,
 		tried:                 make(map[uint]struct{}),
 		skippedGroups:         make(map[uint]struct{}),
 		now:                   now,
@@ -271,6 +284,9 @@ func (iterator *Iterator) withWeightedPool(candidates *candidatePool, modes []ch
 				}
 			}
 			if _, skipped := iterator.skippedGroups[credential.GroupID]; skipped {
+				continue
+			}
+			if iterator.limiter != nil && !iterator.credentialAvailable(credential, candidates) {
 				continue
 			}
 			for _, target := range candidates.targetsByGroup[credential.GroupID] {
@@ -470,15 +486,30 @@ func newSelection(credential state.CredentialMeta, target candidateTarget) Selec
 	resolvedTarget := target.target.ResolvedTarget
 	resolvedTarget.TargetConfig = append([]byte(nil), resolvedTarget.TargetConfig...)
 	return Selection{
-		CredentialID:             credential.ID,
-		GroupID:                  credential.GroupID,
-		ChannelID:                resolvedTarget.ChannelID,
-		ResolvedTarget:           resolvedTarget,
-		RouteMode:                target.target.Mode,
-		UpstreamModelID:          upstreamModelID,
-		Group:                    cloneGroupView(target.group),
-		ResponsesStoreDowngraded: target.responsesStoreDowngraded,
+		CredentialID:               credential.ID,
+		GroupID:                    credential.GroupID,
+		ChannelID:                  resolvedTarget.ChannelID,
+		ResolvedTarget:             resolvedTarget,
+		RouteMode:                  target.target.Mode,
+		UpstreamModelID:            upstreamModelID,
+		Group:                      cloneGroupView(target.group),
+		ResponsesStoreDowngraded:   target.responsesStoreDowngraded,
+		CredentialRPMLimit:         state.EffectiveCredentialLimit(target.group.CredentialRPMLimit, credential.RPMLimit),
+		CredentialConcurrencyLimit: state.EffectiveCredentialLimit(target.group.CredentialConcurrencyLimit, credential.ConcurrencyLimit),
 	}
+}
+
+// credentialAvailable 按“凭据自身值优先、否则继承分组默认值”解析限额，
+// 满额凭据不进候选池，调度器自然换号。分组内任一目标的限额相同，取第一个即可。
+func (iterator *Iterator) credentialAvailable(credential state.CredentialMeta, pool *candidatePool) bool {
+	targets := pool.targetsByGroup[credential.GroupID]
+	if len(targets) == 0 {
+		return true
+	}
+	group := targets[0].group
+	rpm := state.EffectiveCredentialLimit(group.CredentialRPMLimit, credential.RPMLimit)
+	concurrency := state.EffectiveCredentialLimit(group.CredentialConcurrencyLimit, credential.ConcurrencyLimit)
+	return iterator.limiter.Available(credential.ID, rpm, concurrency)
 }
 
 func optionalModel(value string) *string {

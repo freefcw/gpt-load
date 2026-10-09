@@ -1167,7 +1167,7 @@ func TestWebsocketCacheAffinityAndConnectionBindingKinds(t *testing.T) {
 	send(third, "b", "another", 4)
 	events := sink.snapshot()
 	assertAffinityHits(t, events, []bool{false, true, true, false})
-	if events[1].AffinityKind != telemetry.AffinityPromptCacheKey || events[2].AffinityKind != telemetry.AffinityResponseContinuity {
+	if events[1].AffinityKind != telemetry.AffinityPromptCacheKey || events[2].AffinityKind != telemetry.AffinityWebsocketBinding {
 		t.Fatal("WebSocket affinity kind mismatch")
 	}
 }

@@ -1946,6 +1946,10 @@ func newModelListHandlerEngineWithLimit(
 
 type panicRuntimeRegistry struct{}
 
+func (panicRuntimeRegistry) ConfigurationRevision() uint64 {
+	panic("model endpoint read credential configuration revision")
+}
+
 func (panicRuntimeRegistry) SetModelCooldown(state.CredentialRef, string, time.Time, time.Time) (bool, bool) {
 	panic("model endpoint mutated cooldown")
 }

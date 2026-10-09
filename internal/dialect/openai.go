@@ -29,6 +29,7 @@ func (d *OpenAI) InspectRequest(req *ParsedRequest) (RequestMetadata, error) {
 	}
 	metadata.ObserveUsage = true
 	metadata.PromptCacheKey = inspectPromptCacheKey(req.Body)
+	metadata.SessionID = inspectSessionAffinityID(req.Header)
 	metadata.AffinityPrefix = inspectPromptAffinityPrefix(d.Protocol(), req.Body)
 	metadata.PricingMode, metadata.UsageDiagnostics, err = openAIRequestPricing(req.Body)
 	if err != nil {

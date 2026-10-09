@@ -18,7 +18,9 @@ export const zhCN = {
   affinityKinds: {
     prompt_prefix: '提示词前缀',
     prompt_cache_key: '缓存键',
+    session_id: '会话标识',
     response_continuity: '响应连续性',
+    websocket_binding: 'WebSocket 绑定',
     other: '亲和命中',
   },
   standaloneSearchHint: 'Codex 独立搜索请求',
@@ -330,7 +332,9 @@ export const enUS: typeof zhCN = {
   affinityKinds: {
     prompt_prefix: 'Prompt prefix',
     prompt_cache_key: 'Cache key',
+    session_id: 'Session ID',
     response_continuity: 'Response continuity',
+    websocket_binding: 'WebSocket binding',
     other: 'Affinity match',
   },
   standaloneSearchHint: 'Codex standalone search request',
@@ -645,7 +649,9 @@ export const jaJP: typeof zhCN = {
   affinityKinds: {
     prompt_prefix: 'プロンプト接頭辞',
     prompt_cache_key: 'キャッシュキー',
+    session_id: 'セッション ID',
     response_continuity: '応答の連続性',
+    websocket_binding: 'WebSocket バインディング',
     other: 'アフィニティ一致',
   },
   standaloneSearchHint: 'Codex の独立検索リクエスト',

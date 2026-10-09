@@ -314,7 +314,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		reject(value)
 		return
 	}
-	affinity := h.resolveRequestAffinity(snapshot, key.ID, protocol.OpenAIResponses, original.metadata.AffinityPrefix, query.AllowedCredentialRefs, original.metadata.PromptCacheKey)
+	affinity := h.resolveRequestAffinity(snapshot, key.ID, protocol.OpenAIResponses, original.metadata.AffinityPrefix, query.AllowedCredentialRefs, original.metadata.PromptCacheKey, original.metadata.SessionID)
 	if requiredRef == nil {
 		query.PreferredCredentialID = affinity.preferredCredentialID
 	}
@@ -534,6 +534,9 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			kind := affinity.kind
 			if requiredRef != nil {
 				kind = telemetry.AffinityResponseContinuity
+				if binding != nil && original.previous == "" {
+					kind = telemetry.AffinityWebsocketBinding
+				}
 			}
 			recorder.setAffinityHit(requiredRef != nil || selection.CredentialID == affinity.preferredCredentialID, kind)
 		}

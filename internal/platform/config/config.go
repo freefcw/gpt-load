@@ -130,6 +130,7 @@ type Config struct {
 	ClientIPHeader            string
 	TrustedProxies            []string
 	Server                    ServerConfig
+	WebDistDir                string
 	DataDir                   string
 	DatabaseDSN               string
 	DatabaseMetadata          DatabaseMetadata
@@ -202,6 +203,7 @@ func Load() (*Config, error) {
 		)
 	}
 
+	webDistDir := strings.TrimSpace(os.Getenv("WEB_DIST_DIR"))
 	dataDir := valueOrDefault("DATA_DIR", defaultDataDir)
 	if err := securefile.PrepareManagedDataDir(dataDir); err != nil {
 		return nil, fmt.Errorf("prepare DATA_DIR: %w", err)
@@ -286,6 +288,7 @@ func Load() (*Config, error) {
 			ReadTimeout:             readTimeout,
 			IdleTimeout:             idleTimeout,
 		},
+		WebDistDir:       webDistDir,
 		DataDir:          dataDir,
 		DatabaseDSN:      databaseDSN,
 		DatabaseMetadata: databaseMetadata,

@@ -7,12 +7,15 @@ import (
 	"mime"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/gin-gonic/gin"
 
+	"gpt-load/internal/platform/config"
 	"gpt-load/internal/platform/httproute"
 )
 
@@ -212,6 +215,158 @@ func TestServerUsesCompileFallbackWhenIndexIsMissing(t *testing.T) {
 
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "前端资源尚未构建") {
 		t.Fatalf("fallback response = %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestNewServerServesExternalDistDirFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		"index.html":         "<!doctype html><title>external dist</title>",
+		"assets/app.js":      "export default 'external'",
+		"theme-bootstrap.js": "document.documentElement.dataset.theme = 'dark'",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	server, err := NewServer(&config.Config{WebDistDir: dir})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	engine := testEngine(server)
+
+	for _, test := range []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "index", path: "/", want: "external dist"},
+		{name: "asset", path: "/assets/app.js", want: "export default 'external'"},
+		{name: "theme bootstrap", path: "/theme-bootstrap.js", want: "dataset.theme"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, test.path, nil))
+			if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), test.want) {
+				t.Fatalf("GET %s = %d %q, want body containing %q", test.path, recorder.Code, recorder.Body.String(), test.want)
+			}
+		})
+	}
+}
+
+func TestExternalServerRejectsInvalidDistDir(t *testing.T) {
+	pages, err := loadPageRoutes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "dist.tar.gz")
+	if err := os.WriteFile(file, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name string
+		dir  string
+	}{
+		{name: "missing directory", dir: filepath.Join(t.TempDir(), "absent")},
+		{name: "file instead of directory", dir: file},
+		{name: "directory without index", dir: t.TempDir()},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := newExternalServer(test.dir, pages); err == nil {
+				t.Fatalf("newExternalServer(%q) succeeded, want startup error", test.dir)
+			}
+		})
+	}
+}
+
+func TestExternalServerServesReplacedIndexWithoutRestart(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(dir, "index.html")
+	if err := os.WriteFile(indexPath, []byte("<!doctype html><title>v1</title>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pages, err := loadPageRoutes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := newExternalServer(dir, pages)
+	if err != nil {
+		t.Fatalf("newExternalServer() error = %v", err)
+	}
+	engine := testEngine(server)
+
+	first := httptest.NewRecorder()
+	engine.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(first.Body.String(), "v1") {
+		t.Fatalf("first GET / = %q, want v1", first.Body.String())
+	}
+
+	if err := os.WriteFile(indexPath, []byte("<!doctype html><title>v2</title>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second := httptest.NewRecorder()
+	engine.ServeHTTP(second, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(second.Body.String(), "v2") {
+		t.Fatalf("second GET / = %q, want replaced v2 without restart", second.Body.String())
+	}
+}
+
+func TestExternalServerFailsWhenIndexDisappearsAtRuntime(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(dir, "index.html")
+	if err := os.WriteFile(indexPath, []byte("<!doctype html><title>present</title>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pages, err := loadPageRoutes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := newExternalServer(dir, pages)
+	if err != nil {
+		t.Fatalf("newExternalServer() error = %v", err)
+	}
+	engine := testEngine(server)
+
+	if err := os.Remove(indexPath); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/", "/unknown-spa-route"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("Accept", "text/html")
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, request)
+		body := recorder.Body.String()
+		if recorder.Code != http.StatusInternalServerError {
+			t.Fatalf("GET %s = %d, want 500 after index.html disappeared", path, recorder.Code)
+		}
+		if strings.Contains(body, "make build") {
+			t.Fatalf("GET %s silently served the compile-time fallback: %q", path, body)
+		}
+	}
+}
+
+func TestExternalServerMissingOptionalFilesReturn404(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><title>minimal</title>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewServer(&config.Config{WebDistDir: dir})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	engine := testEngine(server)
+
+	for _, path := range []string{"/favicon.svg", "/theme-bootstrap.js", "/assets/app.js"} {
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404 for missing optional file", path, recorder.Code)
+		}
 	}
 }
 

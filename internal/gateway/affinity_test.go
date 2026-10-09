@@ -11,9 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gpt-load/internal/affinity"
+	"gpt-load/internal/channel"
 	"gpt-load/internal/execution"
 	"gpt-load/internal/platform/config"
 	"gpt-load/internal/protocol"
+	"gpt-load/internal/scheduler"
 	"gpt-load/internal/state"
 	"gpt-load/internal/telemetry"
 )
@@ -203,8 +205,106 @@ func TestHandlerSoftAffinitySkipsDisabledCredentialAndLearnsReplacement(t *testi
 	}
 	serveAffinityRequest(t, engine, body)
 
-	assertAffinityAttemptKeys(t, forwarder.inputs, []string{"sk-one", "sk-two", "sk-two"})
-	assertAffinityHits(t, sink.snapshot(), []bool{false, false, true})
+	assertAffinityAttemptKeys(t, forwarder.inputs, []string{"sk-one", "sk-two", "sk-one"})
+	assertAffinityHits(t, sink.snapshot(), []bool{false, false, false})
+}
+
+func TestCodexPromptPrefixDoesNotCreateAccountAffinity(t *testing.T) {
+	handler, manager, registry := newHandlerForTest(t, &scriptedForwarder{}, "sk-one", "sk-two")
+	snapshot := manager.Current()
+	group := snapshot.Groups[1]
+	group.ChannelID = channel.Codex
+	snapshot.Groups[1] = group
+	ref, exists := registry.CredentialRef(1)
+	if !exists {
+		t.Fatal("credential ref missing")
+	}
+	secondRef, exists := registry.CredentialRef(2)
+	if !exists {
+		t.Fatal("second credential ref missing")
+	}
+	prefix := []byte("{\"v\":1,\"user\":[\"stable\"]}")
+	affinity := handler.resolveRequestAffinity(
+		snapshot, 1, protocol.OpenAIResponses, prefix,
+		map[uint]state.CredentialRef{1: ref, 2: secondRef}, "", "",
+	)
+	if affinity.key.Valid() || affinity.continuityKey == "" {
+		t.Fatal("Codex prompt prefix became an account affinity key")
+	}
+	handler.recordAffinitySuccess(affinity, scheduler.Selection{
+		CredentialID: 1, GroupID: 1, ChannelID: channel.Codex, Group: group,
+	}, ref)
+	resolved := handler.resolveRequestAffinity(
+		snapshot, 1, protocol.OpenAIResponses, prefix,
+		map[uint]state.CredentialRef{1: ref, 2: secondRef}, "", "",
+	)
+	if resolved.preferredCredentialID != 0 {
+		t.Fatalf("Codex prompt prefix selected account %d, want no account affinity", resolved.preferredCredentialID)
+	}
+	cacheAffinity := handler.resolveRequestAffinity(
+		snapshot, 1, protocol.OpenAIResponses, prefix,
+		map[uint]state.CredentialRef{1: ref, 2: secondRef}, "shared-cache", "",
+	)
+	if cacheAffinity.key.Valid() || cacheAffinity.preferredCredentialID != 0 {
+		t.Fatal("Codex prompt cache key became an account affinity owner")
+	}
+}
+
+func TestExplicitSessionIDAffinityRemainsAnAccountOwner(t *testing.T) {
+	handler, manager, registry := newHandlerForTest(t, &scriptedForwarder{}, "sk-one")
+	snapshot := manager.Current()
+	ref, exists := registry.CredentialRef(1)
+	if !exists {
+		t.Fatal("credential ref missing")
+	}
+	affinity := handler.resolveRequestAffinity(
+		snapshot, 1, protocol.OpenAIResponses, nil,
+		map[uint]state.CredentialRef{1: ref}, "", "explicit-session",
+	)
+	if affinity.kind != telemetry.AffinitySessionID || !affinity.key.Valid() {
+		t.Fatalf("session affinity = %#v, want explicit session key", affinity)
+	}
+	group := snapshot.Groups[1]
+	handler.recordAffinitySuccess(affinity, scheduler.Selection{
+		CredentialID: 1, GroupID: 1, ChannelID: group.ChannelID, Group: group,
+	}, ref)
+	resolved := handler.resolveRequestAffinity(
+		snapshot, 1, protocol.OpenAIResponses, nil,
+		map[uint]state.CredentialRef{1: ref}, "", "explicit-session",
+	)
+	if resolved.preferredCredentialID != 1 {
+		t.Fatalf("preferred credential = %d, want 1", resolved.preferredCredentialID)
+	}
+}
+
+func TestCredentialWeightChangeInvalidatesSoftAffinity(t *testing.T) {
+	handler, manager, registry := newHandlerForTest(t, &scriptedForwarder{}, "sk-one", "sk-two")
+	snapshot := manager.Current()
+	first, firstExists := registry.CredentialRef(1)
+	second, secondExists := registry.CredentialRef(2)
+	if !firstExists || !secondExists {
+		t.Fatal("credential refs missing")
+	}
+	refs := map[uint]state.CredentialRef{1: first, 2: second}
+	prefix := []byte("{\"v\":1,\"user\":[\"weight-change\"]}")
+	request := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", "")
+	if !request.key.Valid() {
+		t.Fatal("initial soft affinity key is missing")
+	}
+	group := snapshot.Groups[1]
+	handler.recordAffinitySuccess(request, scheduler.Selection{
+		CredentialID: 1, GroupID: 1, ChannelID: group.ChannelID, Group: group,
+	}, first)
+	if hit := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", ""); hit.preferredCredentialID != 1 {
+		t.Fatalf("initial preferred credential = %d, want 1", hit.preferredCredentialID)
+	}
+	weight := 100
+	if err := registry.UpdateCredentialConfig(1, state.CredentialStatusActive, &weight); err != nil {
+		t.Fatal(err)
+	}
+	if hit := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", ""); hit.preferredCredentialID != 0 {
+		t.Fatalf("preferred credential after weight change = %d, want 0", hit.preferredCredentialID)
+	}
 }
 
 func TestHandlerDoesNotApplyAffinityWithoutInitialUserText(t *testing.T) {
@@ -256,6 +356,7 @@ func TestHandlerIgnoresAffinityAfterCredentialIdentityChanges(t *testing.T) {
 		prefix,
 		map[uint]state.CredentialRef{1: oldRef},
 		"",
+		"",
 	)
 	if initial.preferredCredentialID != 0 || !initial.key.Valid() {
 		t.Fatalf("initial affinity = %#v, want valid miss", initial)
@@ -275,6 +376,7 @@ func TestHandlerIgnoresAffinityAfterCredentialIdentityChanges(t *testing.T) {
 		prefix,
 		map[uint]state.CredentialRef{1: oldRef},
 		"",
+		"",
 	)
 	if hit.preferredCredentialID != 1 {
 		t.Fatalf("preferred credential = %d, want 1", hit.preferredCredentialID)
@@ -287,6 +389,7 @@ func TestHandlerIgnoresAffinityAfterCredentialIdentityChanges(t *testing.T) {
 		protocol.OpenAICompletions,
 		prefix,
 		map[uint]state.CredentialRef{1: changedRef},
+		"",
 		"",
 	)
 	if stale.preferredCredentialID != 0 {
@@ -304,6 +407,7 @@ func TestHandlerDerivesPrivateContinuityWithoutReenablingDisabledAffinity(t *tes
 		protocol.OpenAICompletions,
 		[]byte(`{"v":1,"user":["hello"]}`),
 		map[uint]state.CredentialRef{1: {ID: 1, GroupID: 1, IdentityGeneration: 1}},
+		"",
 		"",
 	)
 	if resolved.key.Valid() || resolved.preferredCredentialID != 0 || resolved.continuityKey == "" {

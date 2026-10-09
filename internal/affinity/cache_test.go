@@ -153,3 +153,25 @@ func TestCacheConfigureClearsEntriesAndRejectsOlderRevision(t *testing.T) {
 		t.Fatal("configured TTL was not enforced")
 	}
 }
+
+func TestCacheCredentialRevisionClearsEntries(t *testing.T) {
+	now := time.Date(2026, time.August, 12, 12, 0, 0, 0, time.UTC)
+	cache := newCache(2, time.Hour, func() time.Time { return now })
+	key := Key("one")
+	target := Target{GroupID: 1, CredentialID: 11, IdentityGeneration: 101}
+	if !cache.ConfigureWithCredentialRevision(1, 1, 2, time.Hour) {
+		t.Fatal("initial configuration was rejected")
+	}
+	if !cache.RecordSuccess(key, cache.Lookup(key), target) {
+		t.Fatal("RecordSuccess() = false")
+	}
+	if !cache.ConfigureWithCredentialRevision(1, 2, 2, time.Hour) {
+		t.Fatal("credential configuration revision was rejected")
+	}
+	if cache.Lookup(key).Found() {
+		t.Fatal("credential revision did not clear affinity entries")
+	}
+	if cache.ConfigureWithCredentialRevision(1, 1, 2, time.Hour) {
+		t.Fatal("older credential configuration revision was accepted")
+	}
+}

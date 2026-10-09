@@ -95,3 +95,21 @@ func TestPromptCacheKeyNamespacesAndIsolation(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionIDUsesSeparateNamespace(t *testing.T) {
+	base := DeriveSessionID(testHasher{}, 7, protocol.OpenAIResponses, "same-session")
+	if !base.Valid() || base != DeriveSessionID(testHasher{}, 7, protocol.OpenAIResponses, "same-session") {
+		t.Fatal("session affinity key is not stable")
+	}
+	for _, other := range []Key{
+		DeriveKey(testHasher{}, 7, protocol.OpenAIResponses, []byte("same-session")),
+		DerivePromptCacheKey(testHasher{}, 7, protocol.OpenAIResponses, "same-session"),
+		DeriveSessionID(testHasher{}, 8, protocol.OpenAIResponses, "same-session"),
+		DeriveSessionID(testHasher{}, 7, protocol.OpenAICompletions, "same-session"),
+		DeriveSessionID(testHasher{}, 7, protocol.OpenAIResponses, "different-session"),
+	} {
+		if base == other {
+			t.Fatal("session affinity namespace or tenant boundary collapsed")
+		}
+	}
+}

@@ -47,3 +47,20 @@ func TestPromptCacheKeyValidationAndProtocolScope(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionAffinityIDReadsExplicitHeaderOnly(t *testing.T) {
+	request := &ParsedRequest{
+		Method: http.MethodPost, Path: "/v1/responses",
+		Header: http.Header{"Session-Id": {"codex-session-1"}},
+		Body:   []byte("{\"model\":\"test\",\"input\":\"hello\"}"),
+	}
+	metadata, err := NewOpenAIResponses().InspectRequest(request)
+	if err != nil || metadata.SessionID != "codex-session-1" {
+		t.Fatalf("SessionID = %q, error = %v", metadata.SessionID, err)
+	}
+	request.Header.Set("Session-Id", strings.Repeat("x", maxSessionAffinityIDBytes+1))
+	metadata, err = NewOpenAIResponses().InspectRequest(request)
+	if err != nil || metadata.SessionID != "" {
+		t.Fatalf("oversized SessionID = %q, error = %v", metadata.SessionID, err)
+	}
+}

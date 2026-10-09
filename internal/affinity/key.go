@@ -36,6 +36,13 @@ func DerivePromptCacheKey(hasher Hasher, accessKeyID uint, clientProtocol protoc
 	return deriveKey(hasher, accessKeyID, clientProtocol, "gpt-load/affinity/prompt-cache-key/v1", []byte(key))
 }
 
+// DeriveSessionID creates a separate namespace for explicit client session
+// identities. Session IDs must not collide with prompt-cache keys or derived
+// prompt-prefix continuity scopes.
+func DeriveSessionID(hasher Hasher, accessKeyID uint, clientProtocol protocol.Protocol, sessionID string) Key {
+	return deriveKey(hasher, accessKeyID, clientProtocol, "gpt-load/affinity/session-id/v1", []byte(sessionID))
+}
+
 func deriveKey(hasher Hasher, accessKeyID uint, clientProtocol protocol.Protocol, domain string, prefix []byte) Key {
 	if hasher == nil || accessKeyID == 0 || !clientProtocol.Valid() || len(prefix) == 0 {
 		return ""

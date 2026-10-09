@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"gpt-load/internal/affinity"
+	"gpt-load/internal/channel"
 	"gpt-load/internal/protocol"
 	"gpt-load/internal/scheduler"
 	"gpt-load/internal/state"
@@ -23,25 +24,37 @@ func (handler *Handler) resolveRequestAffinity(
 	prefix []byte,
 	allowedCredentialRefs map[uint]state.CredentialRef,
 	promptCacheKey string,
+	sessionID string,
 ) requestAffinity {
 	if handler == nil || snapshot == nil {
 		return requestAffinity{}
 	}
-	key := affinity.DeriveKey(
+	continuityKey := affinity.DeriveKey(
 		handler.encryption,
 		accessKeyID,
 		clientProtocol,
 		prefix,
 	)
-	// 执行层私有 replay scope 仍由提示词派生，不把客户端缓存分组当作会话身份。
-	result := requestAffinity{continuityKey: string(key), kind: telemetry.AffinityPromptPrefix}
-	if promptCacheKey != "" {
-		key = affinity.DerivePromptCacheKey(handler.encryption, accessKeyID, clientProtocol, promptCacheKey)
-		result.kind = telemetry.AffinityPromptCacheKey
+	// 执行层私有 replay scope 仍由提示词派生；它与账号路由 owner 是两个不同概念。
+	result := requestAffinity{continuityKey: string(continuityKey), kind: telemetry.AffinityPromptPrefix}
+	var key affinity.Key
+	if sessionID != "" {
+		key = affinity.DeriveSessionID(handler.encryption, accessKeyID, clientProtocol, sessionID)
+		result.kind = telemetry.AffinitySessionID
+	} else if allowPromptDerivedAccountAffinity(snapshot, allowedCredentialRefs) {
+		if promptCacheKey != "" {
+			// prompt_cache_key is a cache hint. Codex-only candidate pools must not
+			// turn one shared cache key into a permanent account owner.
+			key = affinity.DerivePromptCacheKey(handler.encryption, accessKeyID, clientProtocol, promptCacheKey)
+			result.kind = telemetry.AffinityPromptCacheKey
+		} else {
+			key = continuityKey
+		}
 	}
 	if handler.affinityCache == nil ||
-		!handler.affinityCache.Configure(
+		!handler.affinityCache.ConfigureWithCredentialRevision(
 			snapshot.Revision,
+			handler.registry.ConfigurationRevision(),
 			snapshot.Settings.AffinityCapacity,
 			snapshot.Settings.AffinityTTL,
 		) {
@@ -69,6 +82,22 @@ func (handler *Handler) resolveRequestAffinity(
 	}
 	resolved.preferredCredentialID = target.CredentialID
 	return resolved
+}
+
+func allowPromptDerivedAccountAffinity(
+	snapshot *state.ConfigSnapshot,
+	allowedCredentialRefs map[uint]state.CredentialRef,
+) bool {
+	if snapshot == nil || len(allowedCredentialRefs) == 0 {
+		return false
+	}
+	for _, ref := range allowedCredentialRefs {
+		group, exists := snapshot.Groups[ref.GroupID]
+		if !exists || group.ChannelID == channel.Codex {
+			return false
+		}
+	}
+	return true
 }
 
 func (handler *Handler) recordAffinitySuccess(

@@ -88,6 +88,10 @@ type CredentialRegistry struct {
 	mu               sync.RWMutex
 	buckets          map[uint]map[uint]*CredentialEntry
 	credentialGroups map[uint]uint
+	// configurationRevision changes when credential configuration that can
+	// affect soft routing affinity changes. Runtime health transitions do not
+	// advance it.
+	configurationRevision uint64
 }
 
 func NewCredentialRegistry() *CredentialRegistry {
@@ -95,6 +99,25 @@ func NewCredentialRegistry() *CredentialRegistry {
 		scheduling:       NewSchedulingState(),
 		buckets:          make(map[uint]map[uint]*CredentialEntry),
 		credentialGroups: make(map[uint]uint),
+	}
+}
+
+// ConfigurationRevision identifies credential configuration visible to the
+// router. It is intentionally separate from ConfigSnapshot.Revision because
+// account weight/status mutations update the Registry without recompiling the
+// group snapshot.
+func (r *CredentialRegistry) ConfigurationRevision() uint64 {
+	if r == nil {
+		return 0
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.configurationRevision
+}
+
+func (r *CredentialRegistry) bumpConfigurationRevisionLocked() {
+	if r.configurationRevision < ^uint64(0) {
+		r.configurationRevision++
 	}
 }
 
@@ -168,6 +191,7 @@ func (r *CredentialRegistry) ReplaceCredentials(entries []CredentialEntry) error
 		views = append(views, runtimeView(&entry))
 	}
 	r.scheduling.SyncCredentials(0, views)
+	r.bumpConfigurationRevisionLocked()
 	r.mu.Unlock()
 	return nil
 }
@@ -202,6 +226,7 @@ func (r *CredentialRegistry) ApplyCredentialImport(groupID uint, entries []Crede
 		r.credentialGroups[entry.ID] = groupID
 		r.scheduling.SyncCredential(runtimeView(r.buckets[groupID][entry.ID]))
 	}
+	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -257,6 +282,7 @@ func (r *CredentialRegistry) RestoreGroupCredentialEntriesExact(groupID uint, en
 		r.credentialGroups[entry.ID] = groupID
 		r.scheduling.SyncCredential(runtimeView(r.buckets[groupID][entry.ID]))
 	}
+	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -338,6 +364,7 @@ func (r *CredentialRegistry) ReconcileGroup(groupID uint, entries []CredentialEn
 		}
 	}
 	r.syncSchedulingGroupLocked(groupID)
+	r.bumpConfigurationRevisionLocked()
 	return true, nil
 }
 
@@ -398,6 +425,7 @@ func (r *CredentialRegistry) RemoveCredential(credentialID uint) bool {
 	}
 	delete(r.credentialGroups, credentialID)
 	r.scheduling.Remove(credentialID)
+	r.bumpConfigurationRevisionLocked()
 	return true
 }
 
@@ -418,6 +446,7 @@ func (r *CredentialRegistry) UpdateGroupCredentialStatuses(
 		r.buckets[groupID][credentialID].Status = status
 		r.scheduling.SyncCredential(runtimeView(r.buckets[groupID][credentialID]))
 	}
+	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -435,6 +464,7 @@ func (r *CredentialRegistry) RemoveGroupCredentials(groupID uint, credentialIDs 
 	if len(r.buckets[groupID]) == 0 {
 		delete(r.buckets, groupID)
 	}
+	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -483,6 +513,7 @@ func (r *CredentialRegistry) RemoveGroup(groupID uint) bool {
 		r.scheduling.Remove(credentialID)
 	}
 	delete(r.buckets, groupID)
+	r.bumpConfigurationRevisionLocked()
 	return true
 }
 
@@ -498,6 +529,7 @@ func (r *CredentialRegistry) SetCredentialStatus(credentialID uint, status Crede
 	}
 	r.buckets[groupID][credentialID].Status = status
 	r.scheduling.SyncCredential(runtimeView(r.buckets[groupID][credentialID]))
+	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -522,6 +554,7 @@ func (r *CredentialRegistry) UpdateCredentialConfig(
 	entry.Status = status
 	entry.WeightManual = clonedWeight
 	r.scheduling.SyncCredential(runtimeView(entry))
+	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 

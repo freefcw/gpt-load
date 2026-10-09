@@ -286,7 +286,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		}
 		original = effective
 	}
-	query := scheduler.Query{ClientProtocol: protocol.OpenAIResponses, Operation: execution.OperationResponsesCreate, RouteRequirement: execution.RouteRequirementNative, ResponsesStorePreference: original.metadata.ResponsesStorePreference, ExternalModel: original.metadata.Model, AccessKey: key, AllowedCredentialIDs: make(map[uint]struct{}), AllowedCredentialRefs: make(map[uint]state.CredentialRef)}
+	query := scheduler.Query{ClientProtocol: protocol.OpenAIResponses, Operation: execution.OperationResponsesCreate, RouteRequirement: execution.RouteRequirementNative, ResponsesStorePreference: original.metadata.ResponsesStorePreference, ExternalModel: original.metadata.Model, AccessKey: key, AllowedCredentialIDs: make(map[uint]struct{}), AllowedCredentialRefs: make(map[uint]state.CredentialRef), Limiter: h.credentialLimiter}
 	query.ResponsesWebsocket = &original.required
 	groups := scheduler.CandidateGroupIDsForQuery(snapshot, query)
 	for _, ref := range h.registry.CaptureActiveCredentialRefs(groups) {
@@ -545,6 +545,13 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			reject(*failure)
 			return
 		}
+		releaseCredential, acquired := h.acquireCredentialSlot(selection)
+		if !acquired {
+			releaseGroup()
+			reject(reasonNoCandidate)
+			return
+		}
+		defer releaseCredential()
 		defer releaseGroup()
 		started := recorder.beforeForward()
 		forwardAttempts++
@@ -613,6 +620,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		}
 		cancel()
 		releaseInput()
+		releaseCredential()
 		releaseGroup()
 		for _, name := range []string{"X-Request-Id", "Request-Id", "Openai-Request-Id", "X-Oai-Request-Id"} {
 			if value := result.Header.Get(name); value != "" && len(value) <= 1024 {

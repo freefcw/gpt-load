@@ -11,6 +11,8 @@ type CredentialRuntimeView struct {
 	Version            uint64
 	IdentityGeneration uint64
 	WeightManual       *int
+	RPMLimit           int64
+	ConcurrencyLimit   int64
 	Status             CredentialStatus
 	AuthState          CredentialAuthState
 	CooldownUntil      time.Time
@@ -63,6 +65,8 @@ func runtimeView(entry *CredentialEntry) CredentialRuntimeView {
 		Version:            entry.Version,
 		IdentityGeneration: entry.IdentityGeneration,
 		WeightManual:       cloneWeight(entry.WeightManual),
+		RPMLimit:           entry.RPMLimit,
+		ConcurrencyLimit:   entry.ConcurrencyLimit,
 		Status:             entry.Status,
 		AuthState:          entry.AuthState.normalize(),
 		CooldownUntil:      effectiveCooldownUntil(entry),

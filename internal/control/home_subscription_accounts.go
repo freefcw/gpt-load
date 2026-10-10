@@ -345,6 +345,8 @@ func (s *Service) mapHomeSubscriptionAccount(
 		representative.bucket,
 		s.stats.Snapshot(credential.ID, observedAt),
 		observedAt,
+		group.CredentialRPMLimit,
+		group.CredentialConcurrencyLimit,
 	)
 	if err != nil {
 		return HomeSubscriptionAccountResponse{}, err

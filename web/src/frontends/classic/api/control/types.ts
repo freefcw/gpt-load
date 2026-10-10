@@ -159,6 +159,8 @@ export interface GroupSettingsDto {
   validation_protocols: AccessProtocol[]
   enabled: boolean
   weight_manual: number | null
+  credential_rpm_limit: number
+  credential_concurrency_limit: number
   overrides: GroupRuntimeConfigDto
   effective: GroupEffectiveConfigDto
   proxy: ProxyViewDto
@@ -312,6 +314,12 @@ export interface CredentialItemDto {
   configured_status: CredentialConfiguredStatus
   effective_status: CredentialStatus
   weight: number
+  rpm_limit: number
+  concurrency_limit: number
+  effective_rpm_limit: number
+  effective_concurrency_limit: number
+  group_rpm_limit: number
+  group_concurrency_limit: number
   recent_success_count: number
   recent_failure_count: number
   consecutive_failure_count: number

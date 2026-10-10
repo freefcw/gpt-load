@@ -8,7 +8,17 @@ export function createModernQueryClient() {
       queries: {
         retry: false,
         staleTime: 0,
-        refetchInterval: false,
+        // 限额用量会随请求变化，这几类查询每 5 秒刷新一次；页面不可见时不刷新。
+        refetchInterval: (query): number | false => {
+          if (query.queryKey[0] !== 'modern') return false
+          const section = query.queryKey[1]
+          return section === 'group-credentials' ||
+            section === 'access-keys' ||
+            section === 'access-key-detail' ||
+            section === 'credential-detail'
+            ? 5000
+            : false
+        },
         refetchIntervalInBackground: false,
         refetchOnWindowFocus: true,
         refetchOnReconnect: false,

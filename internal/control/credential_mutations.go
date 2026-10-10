@@ -22,20 +22,27 @@ import (
 	"gpt-load/internal/storage/models"
 )
 
+// credentialLimitUpdate 是凭据本地限额的更新结果。nil 表示本次请求未涉及该字段。
+type credentialLimitUpdate struct {
+	rpm         *int64
+	concurrency *int64
+}
+
 func normalizeCredentialUpdate(
 	request CredentialUpdateRequest,
 	encryptionService encryption.Service,
-) (status *state.CredentialStatus, weight *int, weightSet bool, proxy *string, proxySet bool, err error) {
-	if !request.Name.Set && !request.Status.Set && !request.WeightManual.Set && !request.Proxy.Set {
-		return nil, nil, false, nil, false, app_errors.ErrBadRequest
+) (status *state.CredentialStatus, weight *int, weightSet bool, limits credentialLimitUpdate, proxy *string, proxySet bool, err error) {
+	if !request.Name.Set && !request.Status.Set && !request.WeightManual.Set && !request.Proxy.Set &&
+		!request.RPMLimit.Set && !request.ConcurrencyLimit.Set {
+		return nil, nil, false, credentialLimitUpdate{}, nil, false, app_errors.ErrBadRequest
 	}
 	if request.Name.Set && (request.Name.Null || utf8.RuneCountInString(strings.TrimSpace(request.Name.Value)) > 255 || strings.ContainsFunc(strings.TrimSpace(request.Name.Value), unicode.IsControl)) {
-		return nil, nil, false, nil, false, app_errors.ErrValidation
+		return nil, nil, false, credentialLimitUpdate{}, nil, false, app_errors.ErrValidation
 	}
 	if request.Status.Set {
 		if request.Status.Null ||
 			(request.Status.Value != state.CredentialStatusActive && request.Status.Value != state.CredentialStatusDisabled) {
-			return nil, nil, false, nil, false, app_errors.ErrValidation
+			return nil, nil, false, credentialLimitUpdate{}, nil, false, app_errors.ErrValidation
 		}
 		value := request.Status.Value
 		status = &value
@@ -44,17 +51,34 @@ func normalizeCredentialUpdate(
 		weightSet = true
 		if !request.WeightManual.Null {
 			if request.WeightManual.Value < 1 || request.WeightManual.Value > state.MaxWeight {
-				return nil, nil, false, nil, false, app_errors.ErrValidation
+				return nil, nil, false, credentialLimitUpdate{}, nil, false, app_errors.ErrValidation
 			}
 			value := request.WeightManual.Value
 			weight = &value
 		}
 	}
+	// 限额不接受 null 或负数：0 表示继承分组默认值，而不是不限。
+	for _, field := range []struct {
+		in  optionalField[int64]
+		out **int64
+	}{
+		{request.RPMLimit, &limits.rpm},
+		{request.ConcurrencyLimit, &limits.concurrency},
+	} {
+		if !field.in.Set {
+			continue
+		}
+		if field.in.Null || field.in.Value < 0 {
+			return nil, nil, false, credentialLimitUpdate{}, nil, false, app_errors.ErrValidation
+		}
+		value := field.in.Value
+		*field.out = &value
+	}
 	proxy, proxySet, err = normalizeProxyOverride(request.Proxy, encryptionService)
 	if err != nil {
-		return nil, nil, false, nil, false, err
+		return nil, nil, false, credentialLimitUpdate{}, nil, false, err
 	}
-	return status, weight, weightSet, proxy, proxySet, nil
+	return status, weight, weightSet, limits, proxy, proxySet, nil
 }
 
 func nextCredentialUpdatedAtMS(now time.Time, previous int64) (int64, error) {
@@ -143,7 +167,7 @@ func (s *Service) UpdateGroupCredential(
 	if groupID == 0 || credentialID == 0 {
 		return CredentialItemResponse{}, app_errors.ErrBadRequest
 	}
-	status, weight, weightSet, proxy, proxySet, err := normalizeCredentialUpdate(request, s.encryption)
+	status, weight, weightSet, limits, proxy, proxySet, err := normalizeCredentialUpdate(request, s.encryption)
 	if err != nil {
 		return CredentialItemResponse{}, err
 	}
@@ -191,6 +215,14 @@ func (s *Service) UpdateGroupCredential(
 			committed.WeightManual = cloneInt(weight)
 			updates["weight_manual"] = committed.WeightManual
 		}
+		if limits.rpm != nil {
+			committed.RPMLimit = *limits.rpm
+			updates["rpm_limit"] = committed.RPMLimit
+		}
+		if limits.concurrency != nil {
+			committed.ConcurrencyLimit = *limits.concurrency
+			updates["concurrency_limit"] = committed.ConcurrencyLimit
+		}
 		if proxySet {
 			proxy, err = s.managedProxyOverride(ctx, tx, proxy)
 			if err != nil {
@@ -211,7 +243,7 @@ func (s *Service) UpdateGroupCredential(
 		return nil
 	}, func() error {
 		committedProxyUpdate = proxySet
-		if request.Name.Set && !request.Status.Set && !weightSet && !proxySet {
+		if request.Name.Set && !request.Status.Set && !weightSet && !proxySet && limits.rpm == nil && limits.concurrency == nil {
 			if !s.registry.UpdateCredentialName(groupID, credentialID, committed.Name) {
 				return dbRegistryMismatch(mismatchMissingRegistry, groupID, credentialID)
 			}
@@ -225,6 +257,8 @@ func (s *Service) UpdateGroupCredential(
 		entry.Name = committed.Name
 		entry.Status = state.CredentialStatus(committed.Status)
 		entry.WeightManual = cloneInt(committed.WeightManual)
+		entry.RPMLimit = committed.RPMLimit
+		entry.ConcurrencyLimit = committed.ConcurrencyLimit
 		entry.Version = groupCollectionCredentialVersion(committed.SecretVersion)
 		entry.IdentityGeneration = groupCollectionCredentialIdentity(
 			committed.IdentityFingerprint,
@@ -489,7 +523,8 @@ func (s *Service) mapCredentialItem(
 	}
 	bucket := classifyHealthKey(state.GroupCatalogView{ID: group.ID, Name: group.Name, Enabled: group.Enabled,
 		WeightManual: cloneInt(group.WeightManual)}, view, observedAt)
-	item, err := mapCredentialRuntimeItem(mask, row.ID, view, bucket, stats, observedAt)
+	item, err := mapCredentialRuntimeItem(mask, row.ID, view, bucket, stats, observedAt,
+		group.CredentialRPMLimit, group.CredentialConcurrencyLimit)
 	if err != nil {
 		return CredentialItemResponse{}, err
 	}

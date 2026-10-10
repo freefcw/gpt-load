@@ -93,10 +93,7 @@ function requestClose(open: boolean): void {
 function guardOutside(event: Event): void {
   const target = event.target
   // 有未保存草稿，或点击的就是数字本身时不收起，交由保存/取消处理。
-  if (
-    dirty.value ||
-    (target instanceof Node && Boolean(trigger.value?.contains(target)))
-  ) {
+  if (dirty.value || (target instanceof Node && Boolean(trigger.value?.contains(target)))) {
     event.preventDefault()
   }
 }

@@ -73,8 +73,6 @@ type CredentialConfig struct {
 	Version            uint64
 	IdentityGeneration uint64
 	Fingerprint        string
-	RPMLimit           int64
-	ConcurrencyLimit   int64
 }
 
 type ModelConfig struct {

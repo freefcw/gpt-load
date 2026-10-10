@@ -748,9 +748,14 @@ func TestGatewayFailureAndValidationRecoveryFailureFirstKeepsRegistryAndStatsFai
 		t.Fatal("stale validation recovery = true after gateway failure, want false")
 	}
 
-	if got, want := baseRegistry.BlacklistedCredentials(), []state.CredentialRef{{
+	got := baseRegistry.BlacklistedCredentials()
+	if len(got) != 1 || got[0].ConfigurationRevision == 0 {
+		t.Fatalf("blacklisted credential revision = %#v, want non-zero", got)
+	}
+	if want := []state.CredentialRef{{
 		ID: 1, GroupID: 1, Version: 1, IdentityGeneration: 1,
 		Fingerprint: "test-1", EncryptedValue: "cipher", FailureGeneration: 1,
+		ConfigurationRevision: got[0].ConfigurationRevision,
 	}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("blacklisted keys = %#v, want %#v", got, want)
 	}
@@ -1956,10 +1961,6 @@ type panicRuntimeRegistry struct{}
 
 func (panicRuntimeRegistry) SetQuotaCooldown(state.CredentialRef, string, time.Time, time.Time) (bool, bool) {
 	panic("model endpoint mutated quota cooldown")
-}
-
-func (panicRuntimeRegistry) ConfigurationRevision() uint64 {
-	panic("model endpoint read credential configuration revision")
 }
 
 func (panicRuntimeRegistry) SetModelCooldown(state.CredentialRef, string, time.Time, time.Time) (bool, bool) {

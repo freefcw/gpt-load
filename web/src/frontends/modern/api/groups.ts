@@ -68,6 +68,9 @@ export interface GroupBasics {
   enabled: boolean
   weight: number | null
   priceMultiplier: string
+  // 分组下发的凭据默认限额。0 表示不限。
+  credentialRpmLimit: number
+  credentialConcurrencyLimit: number
 }
 export type GroupBasicsPatch = Partial<{
   priority: number
@@ -75,6 +78,8 @@ export type GroupBasicsPatch = Partial<{
   enabled: boolean
   weight_manual: number | null
   price_multiplier: string
+  credential_rpm_limit: number
+  credential_concurrency_limit: number
 }>
 export const groupQueryKey = ['modern', 'groups', 'workspace'] as const
 export const credentialOptionsKey = ['modern', 'credential-options'] as const
@@ -187,6 +192,8 @@ export function readGroupBasics(value: unknown): GroupBasics {
     priority: readGroupPriority(data.priority),
     weight,
     priceMultiplier: text(data.price_multiplier),
+    credentialRpmLimit: integer(data.credential_rpm_limit),
+    credentialConcurrencyLimit: integer(data.credential_concurrency_limit),
   }
 }
 export async function getGroupBasics(client: ApiClient, id: number, signal: AbortSignal) {

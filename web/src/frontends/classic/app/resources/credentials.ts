@@ -73,6 +73,9 @@ export interface CredentialPatch {
   name?: string
   status?: CredentialConfiguredStatus
   weight_manual?: number | null
+  // 0 表示继承分组默认限额，不是不限。
+  rpm_limit?: number
+  concurrency_limit?: number
   proxy?: ProxyMutation
 }
 
@@ -110,6 +113,12 @@ const credentialItemFields = [
   'configured_status',
   'effective_status',
   'weight',
+  'rpm_limit',
+  'concurrency_limit',
+  'effective_rpm_limit',
+  'effective_concurrency_limit',
+  'group_rpm_limit',
+  'group_concurrency_limit',
   'recent_success_count',
   'recent_failure_count',
   'consecutive_failure_count',
@@ -612,6 +621,14 @@ export function projectCredentialItem(value: unknown): CredentialItemDto {
     configured_status: configuredStatus,
     effective_status: effectiveStatus,
     weight,
+    rpm_limit: projectSafeInteger(record.rpm_limit, { minimum: 0 }),
+    concurrency_limit: projectSafeInteger(record.concurrency_limit, { minimum: 0 }),
+    effective_rpm_limit: projectSafeInteger(record.effective_rpm_limit, { minimum: 0 }),
+    effective_concurrency_limit: projectSafeInteger(record.effective_concurrency_limit, {
+      minimum: 0,
+    }),
+    group_rpm_limit: projectSafeInteger(record.group_rpm_limit, { minimum: 0 }),
+    group_concurrency_limit: projectSafeInteger(record.group_concurrency_limit, { minimum: 0 }),
     recent_success_count: projectSafeInteger(record.recent_success_count, { minimum: 0 }),
     recent_failure_count: projectSafeInteger(record.recent_failure_count, { minimum: 0 }),
     consecutive_failure_count: projectSafeInteger(record.consecutive_failure_count, { minimum: 0 }),
@@ -704,7 +721,13 @@ function normalizePatch(patch: CredentialPatch): CredentialPatch {
   if (
     keys.length === 0 ||
     keys.some(
-      (key) => key !== 'name' && key !== 'status' && key !== 'weight_manual' && key !== 'proxy',
+      (key) =>
+        key !== 'name' &&
+        key !== 'status' &&
+        key !== 'weight_manual' &&
+        key !== 'rpm_limit' &&
+        key !== 'concurrency_limit' &&
+        key !== 'proxy',
     )
   ) {
     throw new Error('INVALID_CREDENTIAL_PATCH')
@@ -724,6 +747,14 @@ function normalizePatch(patch: CredentialPatch): CredentialPatch {
       throw new Error('INVALID_CREDENTIAL_WEIGHT')
     }
     body.weight_manual = weight
+  }
+  for (const key of ['rpm_limit', 'concurrency_limit'] as const) {
+    if (!Object.prototype.hasOwnProperty.call(patch, key)) continue
+    const limit = patch[key]
+    if (limit === undefined || !Number.isSafeInteger(limit) || limit < 0) {
+      throw new Error('INVALID_CREDENTIAL_LIMIT')
+    }
+    body[key] = limit
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'proxy')) {
     const proxy = patch.proxy

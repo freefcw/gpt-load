@@ -269,6 +269,14 @@ export interface CredentialRow {
   enabled: boolean
   weight: number
   weightManual?: number | null
+  // 凭据自身限额。0 表示继承分组默认值，不是不限。
+  rpmLimit: number
+  concurrencyLimit: number
+  // 解析继承后的实际生效值与分组默认值。0 表示不限。
+  effectiveRpmLimit: number
+  effectiveConcurrencyLimit: number
+  groupRpmLimit: number
+  groupConcurrencyLimit: number
   successes: number
   failures: number
   failuresInRow: number
@@ -325,6 +333,12 @@ export function readCredential(value: unknown): CredentialRow {
     state: oneOf(row.effective_status, credentialStates),
     enabled: oneOf(row.configured_status, ['active', 'disabled']) === 'active',
     weight: integer(row.weight),
+    rpmLimit: integer(row.rpm_limit),
+    concurrencyLimit: integer(row.concurrency_limit),
+    effectiveRpmLimit: integer(row.effective_rpm_limit),
+    effectiveConcurrencyLimit: integer(row.effective_concurrency_limit),
+    groupRpmLimit: integer(row.group_rpm_limit),
+    groupConcurrencyLimit: integer(row.group_concurrency_limit),
     weightManual:
       row.weight_manual === undefined
         ? undefined

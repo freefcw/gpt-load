@@ -30,6 +30,8 @@ const saved = ref<GroupBasics>()
 const name = ref('')
 const priority = ref('0')
 const weight = ref('50')
+const credentialRpmLimit = ref('')
+const credentialConcurrencyLimit = ref('')
 const price = ref('1')
 const enabled = ref(true)
 const saving = ref(false)
@@ -54,6 +56,16 @@ const nameInvalid = computed(
     /\p{Cc}/u.test(name.value.trim()),
 )
 const priorityInvalid = computed(() => !isValidGroupPriority(priority.value))
+// 分组限额留空即 0，0 表示不限。
+function limitValue(value: string): number {
+  return value.trim() === '' ? 0 : Number(value.trim())
+}
+function limitInvalid(value: string): boolean {
+  const parsed = limitValue(value)
+  return !Number.isSafeInteger(parsed) || parsed < 0
+}
+const credentialRpmInvalid = computed(() => limitInvalid(credentialRpmLimit.value))
+const credentialConcurrencyInvalid = computed(() => limitInvalid(credentialConcurrencyLimit.value))
 const weightInvalid = computed(
   () =>
     !/^\d+$/u.test(weight.value) ||
@@ -71,6 +83,8 @@ const dirty = computed(
     (name.value !== saved.value.name ||
       priority.value !== String(saved.value.priority) ||
       weight.value !== String(saved.value.weight ?? 50) ||
+      limitValue(credentialRpmLimit.value) !== saved.value.credentialRpmLimit ||
+      limitValue(credentialConcurrencyLimit.value) !== saved.value.credentialConcurrencyLimit ||
       price.value !== saved.value.priceMultiplier ||
       enabled.value !== saved.value.enabled),
 )
@@ -80,6 +94,9 @@ function accept(data: GroupBasics): void {
   name.value = data.name
   priority.value = String(data.priority)
   weight.value = String(data.weight ?? 50)
+  credentialRpmLimit.value = data.credentialRpmLimit === 0 ? '' : String(data.credentialRpmLimit)
+  credentialConcurrencyLimit.value =
+    data.credentialConcurrencyLimit === 0 ? '' : String(data.credentialConcurrencyLimit)
   price.value = data.priceMultiplier
   enabled.value = data.enabled
   attempted.value = false
@@ -112,9 +129,12 @@ watch(
   },
   { immediate: true },
 )
-watch([name, priority, weight, price, enabled], () => {
-  savedFeedback.value = false
-})
+watch(
+  [name, priority, weight, credentialRpmLimit, credentialConcurrencyLimit, price, enabled],
+  () => {
+    savedFeedback.value = false
+  },
+)
 async function load(): Promise<void> {
   await query.refetch()
 }
@@ -129,7 +149,14 @@ async function save(): Promise<void> {
   if (!saved.value || saving.value || loading.value) return
   attempted.value = true
   saveFailed.value = false
-  if (nameInvalid.value || priorityInvalid.value || weightInvalid.value || priceInvalid.value) {
+  if (
+    nameInvalid.value ||
+    priorityInvalid.value ||
+    weightInvalid.value ||
+    credentialRpmInvalid.value ||
+    credentialConcurrencyInvalid.value ||
+    priceInvalid.value
+  ) {
     await nextTick()
     const field = nameInvalid.value
       ? nameInput
@@ -146,6 +173,10 @@ async function save(): Promise<void> {
   if (name.value.trim() !== saved.value.name) patch.name = name.value.trim()
   if (Number(weight.value) !== (saved.value.weight ?? 50))
     patch.weight_manual = Number(weight.value)
+  if (limitValue(credentialRpmLimit.value) !== saved.value.credentialRpmLimit)
+    patch.credential_rpm_limit = limitValue(credentialRpmLimit.value)
+  if (limitValue(credentialConcurrencyLimit.value) !== saved.value.credentialConcurrencyLimit)
+    patch.credential_concurrency_limit = limitValue(credentialConcurrencyLimit.value)
   if (Number(price.value) !== Number(saved.value.priceMultiplier))
     patch.price_multiplier = price.value.trim()
   if (enabled.value !== saved.value.enabled) patch.enabled = enabled.value
@@ -228,6 +259,30 @@ useMessageSource(() =>
             inputmode="numeric"
             :disabled="saving"
             :error="attempted && weightInvalid ? t('groups.edit.weightError') : undefined"
+          />
+          <AppTextField
+            v-model="credentialRpmLimit"
+            :label="t('credentialCards.limits.rpm')"
+            :placeholder="t('credentialCards.limits.unlimited')"
+            size="sm"
+            inputmode="numeric"
+            :disabled="saving"
+            :error="
+              attempted && credentialRpmInvalid ? t('credentialCards.limits.invalid') : undefined
+            "
+          />
+          <AppTextField
+            v-model="credentialConcurrencyLimit"
+            :label="t('credentialCards.limits.concurrency')"
+            :placeholder="t('credentialCards.limits.unlimited')"
+            size="sm"
+            inputmode="numeric"
+            :disabled="saving"
+            :error="
+              attempted && credentialConcurrencyInvalid
+                ? t('credentialCards.limits.invalid')
+                : undefined
+            "
           />
         </div>
         <AppTextField

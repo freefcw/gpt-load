@@ -35,9 +35,9 @@ type CredentialUpdateRequest struct {
 	Name             optionalField[string]                 `json:"name"`
 	Status           optionalField[state.CredentialStatus] `json:"status"`
 	WeightManual     optionalField[int]                    `json:"weight_manual"`
+	Proxy            optionalField[outboundproxy.Config]   `json:"proxy"`
 	RPMLimit         optionalField[int64]                  `json:"rpm_limit"`
 	ConcurrencyLimit optionalField[int64]                  `json:"concurrency_limit"`
-	Proxy            optionalField[outboundproxy.Config]   `json:"proxy"`
 }
 
 type CredentialRevealResult struct {

@@ -139,25 +139,25 @@ func mapCredentialRuntimeItem(
 	groupConcurrencyLimit int64,
 ) (CredentialItemResponse, error) {
 	item := CredentialItemResponse{
-		CredentialID:      credentialID,
-		Mask:              mask,
-		ConfiguredStatus:  string(view.Status),
-		EffectiveStatus:   string(bucket),
-		Weight:            state.ConfiguredWeight(view.WeightManual),
-		WeightManual:      cloneInt(view.WeightManual),
-		RPMLimit:          view.RPMLimit,
-		ConcurrencyLimit:  view.ConcurrencyLimit,
-		EffectiveRPMLimit: state.EffectiveCredentialLimit(groupRPMLimit, view.RPMLimit),
-		EffectiveConcurrencyLimit: state.EffectiveCredentialLimit(
-			groupConcurrencyLimit, view.ConcurrencyLimit,
-		),
-		GroupRPMLimit:           groupRPMLimit,
-		GroupConcurrencyLimit:   groupConcurrencyLimit,
+		CredentialID:            credentialID,
+		Mask:                    mask,
+		ConfiguredStatus:        string(view.Status),
+		EffectiveStatus:         string(bucket),
+		Weight:                  state.ConfiguredWeight(view.WeightManual),
+		WeightManual:            cloneInt(view.WeightManual),
 		RecentSuccessCount:      stats.Success,
 		RecentFailureCount:      stats.Failure,
 		ConsecutiveFailureCount: stats.ConsecutiveFailure,
 		LastFailureCategory:     normalizeCredentialFailureCategory(stats.LastFailureCategory).String(),
 		LastStatusCode:          optionalHealthStatusCode(stats.LastStatusCode),
+		RPMLimit:                view.RPMLimit,
+		ConcurrencyLimit:        view.ConcurrencyLimit,
+		EffectiveRPMLimit:       state.EffectiveCredentialLimit(groupRPMLimit, view.RPMLimit),
+		EffectiveConcurrencyLimit: state.EffectiveCredentialLimit(
+			groupConcurrencyLimit, view.ConcurrencyLimit,
+		),
+		GroupRPMLimit:         groupRPMLimit,
+		GroupConcurrencyLimit: groupConcurrencyLimit,
 	}
 	limits, err := modelCooldownResponses(view.ModelCooldowns, observedAt)
 	if err != nil {

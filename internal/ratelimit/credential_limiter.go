@@ -101,19 +101,6 @@ func (limiter *CredentialLimiter) RetryAfter(credentialID uint, rpmLimit int64) 
 	return window.at(count - int(rpmLimit)).Add(time.Minute)
 }
 
-// Usage 返回当前 RPM 窗口内的请求数与在途请求数，供管理面实时展示。
-func (limiter *CredentialLimiter) Usage(credentialID uint) (rpmUsed, inFlight int64) {
-	if limiter == nil {
-		return 0, 0
-	}
-	limiter.mu.Lock()
-	defer limiter.mu.Unlock()
-	window := limiter.windows[credentialID]
-	window.dropThrough(limiter.now().Add(-time.Minute))
-	limiter.windows[credentialID] = window
-	return int64(window.len()), limiter.inFlight[credentialID]
-}
-
 // InFlightForTest 返回当前在途数，仅供测试断言名额是否泄漏。
 func (limiter *CredentialLimiter) InFlightForTest(credentialID uint) int64 {
 	limiter.mu.Lock()

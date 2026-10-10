@@ -149,7 +149,7 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 	releaseCredential, acquired := handler.acquireCredentialSlot(selection)
 	if !acquired {
 		release()
-		decision.Reason = "no_candidate"
+		decision.Reason = reasonCredentialRateLimited.Code
 		return decision, result
 	}
 	defer release()

@@ -154,6 +154,8 @@ export const zhCN = {
     empty_response_retry: '空回检测',
     responses_websocket_enabled: 'Responses WebSocket',
   },
+  credentialLimits: '凭据默认限额',
+  credentialLimitsHint: '本组凭据的默认限额。留空表示不限；单个凭据可以单独覆盖。',
 }
 
 export const enUS: typeof zhCN = {
@@ -321,6 +323,9 @@ export const enUS: typeof zhCN = {
     empty_response_retry: 'Empty response detection',
     responses_websocket_enabled: 'Responses WebSocket',
   },
+  credentialLimits: 'Credential limits',
+  credentialLimitsHint:
+    'Defaults for credentials in this group. Leave empty for no limit; a credential can override them.',
 }
 
 export const jaJP: typeof zhCN = {
@@ -485,4 +490,7 @@ export const jaJP: typeof zhCN = {
     empty_response_retry: '空応答の検出',
     responses_websocket_enabled: 'Responses WebSocket',
   },
+  credentialLimits: '認証情報の既定上限',
+  credentialLimitsHint:
+    'このグループの認証情報に適用する既定値です。空欄は無制限。個別の認証情報で上書きできます。',
 }

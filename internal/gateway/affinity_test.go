@@ -205,8 +205,8 @@ func TestHandlerSoftAffinitySkipsDisabledCredentialAndLearnsReplacement(t *testi
 	}
 	serveAffinityRequest(t, engine, body)
 
-	assertAffinityAttemptKeys(t, forwarder.inputs, []string{"sk-one", "sk-two", "sk-one"})
-	assertAffinityHits(t, sink.snapshot(), []bool{false, false, false})
+	assertAffinityAttemptKeys(t, forwarder.inputs, []string{"sk-one", "sk-two", "sk-two"})
+	assertAffinityHits(t, sink.snapshot(), []bool{false, false, true})
 }
 
 func TestCodexPromptPrefixDoesNotCreateAccountAffinity(t *testing.T) {
@@ -302,9 +302,91 @@ func TestCredentialWeightChangeInvalidatesSoftAffinity(t *testing.T) {
 	if err := registry.UpdateCredentialConfig(1, state.CredentialStatusActive, &weight); err != nil {
 		t.Fatal(err)
 	}
+	refs = freshCredentialRefs(t, registry, 1, 2)
 	if hit := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", ""); hit.preferredCredentialID != 0 {
 		t.Fatalf("preferred credential after weight change = %d, want 0", hit.preferredCredentialID)
 	}
+}
+
+// 只有绑定目标凭据自身的配置变化才让亲和失效，其他凭据的权重调整不影响。
+func TestOtherCredentialWeightChangeKeepsSoftAffinity(t *testing.T) {
+	handler, manager, registry := newHandlerForTest(t, &scriptedForwarder{}, "sk-one", "sk-two")
+	snapshot := manager.Current()
+	refs := freshCredentialRefs(t, registry, 1, 2)
+	prefix := []byte("{\"v\":1,\"user\":[\"per-credential-revision\"]}")
+	request := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", "")
+	if !request.key.Valid() {
+		t.Fatal("initial soft affinity key is missing")
+	}
+	group := snapshot.Groups[1]
+	handler.recordAffinitySuccess(request, scheduler.Selection{
+		CredentialID: 1, GroupID: 1, ChannelID: group.ChannelID, Group: group,
+	}, refs[1])
+
+	weight := 100
+	if err := registry.UpdateCredentialConfig(2, state.CredentialStatusActive, &weight); err != nil {
+		t.Fatal(err)
+	}
+	refs = freshCredentialRefs(t, registry, 1, 2)
+	if hit := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", ""); hit.preferredCredentialID != 1 {
+		t.Fatalf("preferred after other credential weight change = %d, want 1", hit.preferredCredentialID)
+	}
+	if err := registry.UpdateCredentialConfig(1, state.CredentialStatusActive, &weight); err != nil {
+		t.Fatal(err)
+	}
+	refs = freshCredentialRefs(t, registry, 1, 2)
+	if hit := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", ""); hit.preferredCredentialID != 0 {
+		t.Fatalf("preferred after bound credential weight change = %d, want 0", hit.preferredCredentialID)
+	}
+}
+
+// 混合池中提示词派生的亲和只绑定非 Codex 凭据。
+func TestMixedPoolPromptAffinitySkipsCodexTarget(t *testing.T) {
+	handler, manager, _ := newHandlerForTest(t, &scriptedForwarder{}, "sk-one", "sk-two")
+	snapshot := manager.Current()
+	codexGroup := snapshot.Groups[1]
+	codexGroup.ChannelID = channel.Codex
+	snapshot.Groups[1] = codexGroup
+	openaiGroup := codexGroup
+	openaiGroup.ID = 2
+	openaiGroup.Name = "openai-two"
+	openaiGroup.ChannelID = channel.OpenAI
+	snapshot.Groups[2] = openaiGroup
+
+	codexRef := state.CredentialRef{ID: 1, GroupID: 1, IdentityGeneration: 1, ConfigurationRevision: 1}
+	openaiRef := state.CredentialRef{ID: 2, GroupID: 2, IdentityGeneration: 1, ConfigurationRevision: 1}
+	refs := map[uint]state.CredentialRef{1: codexRef, 2: openaiRef}
+	prefix := []byte(`{"v":1,"user":["mixed-pool"]}`)
+
+	request := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", "")
+	if !request.key.Valid() {
+		t.Fatal("prompt-derived affinity key missing for mixed pool")
+	}
+	handler.recordAffinitySuccess(request, scheduler.Selection{
+		CredentialID: 1, GroupID: 1, ChannelID: channel.Codex, Group: codexGroup,
+	}, codexRef)
+	if hit := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", ""); hit.preferredCredentialID != 0 {
+		t.Fatalf("preferred after Codex record = %d, want 0", hit.preferredCredentialID)
+	}
+	handler.recordAffinitySuccess(request, scheduler.Selection{
+		CredentialID: 2, GroupID: 2, ChannelID: channel.OpenAI, Group: openaiGroup,
+	}, openaiRef)
+	if hit := handler.resolveRequestAffinity(snapshot, 1, protocol.OpenAICompletions, prefix, refs, "", ""); hit.preferredCredentialID != 2 {
+		t.Fatalf("preferred after non-Codex record = %d, want 2", hit.preferredCredentialID)
+	}
+}
+
+func freshCredentialRefs(t *testing.T, registry *state.CredentialRegistry, ids ...uint) map[uint]state.CredentialRef {
+	t.Helper()
+	refs := make(map[uint]state.CredentialRef, len(ids))
+	for _, id := range ids {
+		ref, exists := registry.CredentialRef(id)
+		if !exists {
+			t.Fatalf("credential ref %d missing", id)
+		}
+		refs[id] = ref
+	}
+	return refs
 }
 
 func TestHandlerDoesNotApplyAffinityWithoutInitialUserText(t *testing.T) {

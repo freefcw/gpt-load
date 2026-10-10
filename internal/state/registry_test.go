@@ -339,6 +339,17 @@ func TestKeyRegistryCaptureActiveKeyRefsIncludesTemporarilyUnavailableKeys(t *te
 		{ID: 22, GroupID: 2, Version: 1, IdentityGeneration: 1, Fingerprint: "test-fingerprint", EncryptedValue: "cipher-available"},
 	}
 	got := registry.CaptureActiveCredentialRefs([]uint{2, 1})
+	if len(got) != len(want) {
+		t.Fatalf("CaptureActiveCredentialRefs() count = %d, want %d", len(got), len(want))
+	}
+	for _, ref := range got {
+		if ref.ConfigurationRevision == 0 {
+			t.Fatalf("CaptureActiveCredentialRefs() returned zero revision: %#v", got)
+		}
+	}
+	for index := range got {
+		want[index].ConfigurationRevision = got[index].ConfigurationRevision
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("CaptureActiveCredentialRefs() = %#v, want %#v", got, want)
 	}
@@ -346,12 +357,20 @@ func TestKeyRegistryCaptureActiveKeyRefsIncludesTemporarilyUnavailableKeys(t *te
 		t.Fatal("IncrFailure(11) = false, want true")
 	}
 	want[0].FailureGeneration = 1
-	if got := registry.CaptureActiveCredentialRefs([]uint{1, 2}); !reflect.DeepEqual(got, want) {
+	got = registry.CaptureActiveCredentialRefs([]uint{1, 2})
+	if got[0].ConfigurationRevision == 0 || got[0].ConfigurationRevision != want[0].ConfigurationRevision {
+		t.Fatalf("runtime failure changed configuration revision: before=%#v after=%#v", want, got)
+	}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("CaptureActiveCredentialRefs() after failure = %#v, want %#v", got, want)
 	}
 
 	got[0].EncryptedValue = "caller-mutated"
-	if again := registry.CaptureActiveCredentialRefs([]uint{1, 2}); !reflect.DeepEqual(again, want) {
+	again := registry.CaptureActiveCredentialRefs([]uint{1, 2})
+	if again[0].ConfigurationRevision == 0 || again[0].ConfigurationRevision != got[0].ConfigurationRevision {
+		t.Fatalf("copied ref changed configuration revision: got=%#v again=%#v", got, again)
+	}
+	if !reflect.DeepEqual(again, want) {
 		t.Fatalf("CaptureActiveCredentialRefs() aliases caller result: %#v", again)
 	}
 }

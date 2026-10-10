@@ -340,6 +340,7 @@ const lastActive = computed(() =>
         </div>
         <div class="modern-group-setting" :data-label="t('groups.edit.priority')">
           <AppInlineNumber
+            popover
             :model-value="group.priority"
             :label="t('groups.edit.priority')"
             :min="-2147483648"
@@ -355,6 +356,7 @@ const lastActive = computed(() =>
         </div>
         <div class="modern-group-setting" :data-label="t('groups.edit.weight')">
           <AppInlineNumber
+            popover
             :model-value="group.weight"
             :label="t('groups.edit.weight')"
             :min="1"

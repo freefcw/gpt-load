@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import AppInlineNumberPopover from './AppInlineNumberPopover.vue'
 import AppTooltip from './AppTooltip.vue'
-import { LoaderCircle, Pencil, Save, X } from '@lucide/vue'
+import { LoaderCircle, Save, X } from '@lucide/vue'
 import { PopoverAnchor, PopoverContent, PopoverPortal, PopoverRoot } from 'reka-ui'
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -17,7 +18,10 @@ const props = defineProps<{
   pending?: boolean
   disabled?: boolean
   error?: string
+  // 分组列表用点击浮层编辑。默认仍是上游的行内输入，避免跟着改公共组件的模板。
+  popover?: boolean
 }>()
+const popoverEditor = ref<InstanceType<typeof AppInlineNumberPopover>>()
 const emit = defineEmits<{
   submit: [value: number]
   editing: [value: boolean]
@@ -31,7 +35,6 @@ const draft = ref(String(props.modelValue))
 const attempted = ref(false)
 const submitted = ref(false)
 const input = ref<HTMLInputElement>()
-const trigger = ref<HTMLButtonElement>()
 const dirty = computed(() => editing.value && draft.value !== String(props.modelValue))
 const invalid = computed(
   () =>
@@ -46,8 +49,12 @@ const error = computed(
       ? t('ui.number.range', { min: props.min, max: props.max })
       : ''),
 )
-watch(dirty, (value) => emit('dirty', value))
-watch(editing, (value) => emit('editing', value))
+watch(dirty, (value) => {
+  if (!props.popover) emit('dirty', value)
+})
+watch(editing, (value) => {
+  if (!props.popover) emit('editing', value)
+})
 watch(
   () => props.modelValue,
   (value) => {
@@ -57,6 +64,7 @@ watch(
 watch(
   () => props.pending,
   (value) => {
+    if (props.popover) return
     if (!value && submitted.value) {
       submitted.value = false
       if (!props.error) void cancel()
@@ -73,29 +81,18 @@ async function start(): Promise<void> {
   input.value?.focus({ preventScroll: true })
   input.value?.select()
 }
-function restore(): void {
-  editing.value = false
+async function cancel(): Promise<void> {
+  if (props.pending) return
   draft.value = String(props.modelValue)
   attempted.value = false
   emit('clearError')
-}
-async function cancel(): Promise<void> {
-  if (props.pending) return
-  restore()
   await nextTick()
-  trigger.value?.focus({ preventScroll: true })
+  input.value?.focus({ preventScroll: true })
+  editing.value = false
 }
-function requestClose(open: boolean): void {
-  // 仅在没有未保存草稿时才接受外部点击引起的收起。
-  if (open || !editing.value || dirty.value) return
-  restore()
-}
-function guardOutside(event: Event): void {
-  const target = event.target
-  // 有未保存草稿，或点击的就是数字本身时不收起，交由保存/取消处理。
-  if (dirty.value || (target instanceof Node && Boolean(trigger.value?.contains(target)))) {
-    event.preventDefault()
-  }
+function edit(): void {
+  editing.value = true
+  emit('clearError')
 }
 function submit(): void {
   if (props.pending || props.disabled) return
@@ -114,83 +111,91 @@ function submit(): void {
 function enter(event: KeyboardEvent): void {
   if (event.isComposing || event.keyCode === 229) return
   event.preventDefault()
-  submit()
+  if (editing.value) submit()
+  else void start()
 }
-defineExpose({ cancel })
+function dismiss(): Promise<void> | undefined {
+  if (props.popover) return popoverEditor.value?.cancel()
+  return cancel()
+}
+defineExpose({ cancel: dismiss })
 </script>
 
 <template>
-  <div class="modern-inline-number" @keydown.esc.stop.prevent="cancel">
-    <PopoverRoot :open="editing" @update:open="requestClose">
+  <AppInlineNumberPopover
+    v-if="popover"
+    ref="popoverEditor"
+    :model-value="modelValue"
+    :label="label"
+    :min="min"
+    :max="max"
+    :pending="pending"
+    :disabled="disabled"
+    :error="error"
+    @submit="emit('submit', $event)"
+    @editing="emit('editing', $event)"
+    @dirty="emit('dirty', $event)"
+    @clear-error="emit('clearError')"
+  />
+  <div v-else class="modern-inline-number" @keydown.esc.stop.prevent="cancel">
+    <PopoverRoot :open="Boolean(error)">
       <PopoverAnchor as-child>
-        <AppTooltip :label="t('ui.edit')" :disabled="editing || disabled || pending">
-          <button
-            ref="trigger"
-            type="button"
-            class="modern-inline-number-display"
-            :class="{ 'is-editing': editing }"
-            :disabled="disabled || pending"
+        <AppFieldControl
+          class="modern-inline-number-field"
+          size="xs"
+          :invalid="Boolean(error)"
+          :disabled="disabled || pending"
+        >
+          <input
+            ref="input"
+            v-model="draft"
             :aria-label="label"
-            :aria-expanded="editing"
+            :aria-invalid="Boolean(error) || undefined"
+            :aria-describedby="error ? id : undefined"
+            :disabled="disabled || pending"
+            :inputmode="min < 0 ? 'text' : 'numeric'"
+            @focus="start"
             @click="start"
-          >
-            <AppIcon :icon="Pencil" size="xs" class="modern-inline-number-hint" />
-            <span class="modern-inline-number-figure">{{ modelValue }}</span>
-          </button>
-        </AppTooltip>
+            @input="edit"
+            @keydown.enter="enter"
+          />
+          <div v-if="editing" class="modern-inline-number-actions">
+            <AppTooltip :label="t('ui.save')">
+              <button
+                type="button"
+                :disabled="disabled || pending"
+                :aria-label="t('ui.save')"
+                @click="submit"
+              >
+                <AppIcon
+                  :icon="pending ? LoaderCircle : Save"
+                  size="xs"
+                  :class="{ 'modern-spin': pending }"
+                />
+              </button>
+            </AppTooltip>
+            <AppTooltip :label="t('ui.cancel')">
+              <button
+                type="button"
+                :disabled="disabled || pending"
+                :aria-label="t('ui.cancel')"
+                @click="cancel"
+              >
+                <AppIcon :icon="X" size="xs" />
+              </button>
+            </AppTooltip>
+          </div>
+        </AppFieldControl>
       </PopoverAnchor>
       <PopoverPortal>
         <AppMenuSurface>
           <PopoverContent
             align="end"
             :side-offset="overlaySideOffset"
-            :aria-label="label"
             @open-auto-focus.prevent
-            @escape-key-down.prevent="cancel"
-            @interact-outside="guardOutside"
+            @close-auto-focus.prevent
           >
-            <div class="modern-inline-number-editor">
-              <AppFieldControl size="xs" :invalid="Boolean(error)" :disabled="disabled || pending">
-                <input
-                  ref="input"
-                  v-model="draft"
-                  :aria-label="label"
-                  :aria-invalid="Boolean(error) || undefined"
-                  :aria-describedby="error ? id : undefined"
-                  :disabled="disabled || pending"
-                  :inputmode="min < 0 ? 'text' : 'numeric'"
-                  @input="emit('clearError')"
-                  @keydown.enter="enter"
-                />
-              </AppFieldControl>
-              <AppTooltip :label="t('ui.save')">
-                <button
-                  type="button"
-                  :disabled="disabled || pending"
-                  :aria-label="t('ui.save')"
-                  @click="submit"
-                >
-                  <AppIcon
-                    :icon="pending ? LoaderCircle : Save"
-                    size="xs"
-                    :class="{ 'modern-spin': pending }"
-                  />
-                </button>
-              </AppTooltip>
-              <AppTooltip :label="t('ui.cancel')">
-                <button
-                  type="button"
-                  :disabled="disabled || pending"
-                  :aria-label="t('ui.cancel')"
-                  @click="cancel"
-                >
-                  <AppIcon :icon="X" size="xs" />
-                </button>
-              </AppTooltip>
-            </div>
-            <p v-if="error" :id="id" class="modern-inline-number-error" role="alert">
-              {{ error }}
-            </p>
+            <p :id="id" class="modern-inline-number-error" role="alert">{{ error }}</p>
           </PopoverContent>
         </AppMenuSurface>
       </PopoverPortal>
@@ -201,70 +206,22 @@ defineExpose({ cancel })
 <style scoped>
 .modern-inline-number {
   display: flex;
+  align-items: center;
   width: var(--modern-inline-number-width);
-  flex: none;
-  justify-content: flex-end;
-}
-.modern-inline-number-display {
-  display: inline-flex;
   max-width: 100%;
-  min-height: var(--modern-control-xs);
-  align-items: center;
-  gap: var(--modern-space-1);
-  border: 0;
-  border-radius: var(--modern-radius-small);
-  padding: 0;
-  background: transparent;
-  color: var(--modern-text);
-  font: inherit;
-  font-size: var(--modern-font-size-section);
-  font-weight: var(--modern-weight-semibold);
-  line-height: var(--modern-leading-compact);
-  font-variant-numeric: tabular-nums;
-  text-align: left;
-  cursor: pointer;
-}
-.modern-inline-number-display:hover:not(:disabled),
-.modern-inline-number-display.is-editing {
-  color: var(--modern-accent);
-}
-.modern-inline-number-display:focus-visible {
-  outline: var(--modern-focus-width) solid var(--modern-accent);
-  outline-offset: var(--modern-focus-offset);
-}
-.modern-inline-number-display:disabled {
-  color: var(--modern-muted);
-  cursor: not-allowed;
-}
-.modern-inline-number-figure {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.modern-inline-number-hint {
   flex: none;
-  color: var(--modern-muted);
-  opacity: 0;
-  transition: opacity var(--modern-motion-fast) var(--modern-motion-ease);
 }
-.modern-inline-number-display:hover:not(:disabled) .modern-inline-number-hint,
-.modern-inline-number-display:focus-visible:not(:disabled) .modern-inline-number-hint,
-.modern-inline-number-display.is-editing .modern-inline-number-hint {
-  opacity: 1;
-}
-.modern-inline-number-editor {
-  display: flex;
-  align-items: center;
-  gap: var(--modern-space-1);
-  padding: var(--modern-space-2);
-}
-.modern-inline-number-editor :deep(.modern-field-control) {
+.modern-inline-number > :first-child {
   flex: 1;
   min-width: 0;
 }
-.modern-inline-number-editor input {
-  width: 100%;
+.modern-inline-number .modern-inline-number-field {
+  gap: calc(var(--modern-space-1) / 2);
+  padding-inline: var(--modern-space-1);
+}
+.modern-inline-number input {
+  flex: 1;
+  width: 0;
   min-width: 0;
   border: 0;
   outline: none;
@@ -274,7 +231,13 @@ defineExpose({ cancel })
   text-align: left;
   font-variant-numeric: tabular-nums;
 }
-.modern-inline-number-editor button {
+.modern-inline-number-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0;
+}
+.modern-inline-number button {
   display: grid;
   min-width: var(--modern-inline-action-target);
   min-height: var(--modern-inline-action-target);
@@ -286,32 +249,20 @@ defineExpose({ cancel })
   padding: 0;
   color: var(--modern-muted);
 }
-.modern-inline-number-editor button:hover:not(:disabled) {
+.modern-inline-number button:hover {
   background: var(--modern-control-hover);
   color: var(--modern-accent);
 }
-.modern-inline-number-editor button:disabled {
-  opacity: var(--modern-opacity-disabled);
-  cursor: not-allowed;
-}
 .modern-inline-number-error {
   max-width: 240px;
-  padding: 0 var(--modern-space-2) var(--modern-space-2);
+  padding: var(--modern-space-2);
   color: var(--modern-danger);
   font-size: var(--modern-font-size-small);
   overflow-wrap: anywhere;
 }
 @media (max-width: 760px) {
-  .modern-inline-number-display {
-    min-width: var(--modern-touch-target);
-    min-height: var(--modern-touch-target);
-  }
-  .modern-inline-number-editor input {
+  .modern-inline-number input {
     font-size: var(--modern-font-size-input-mobile);
-  }
-  .modern-inline-number-editor button {
-    min-width: var(--modern-touch-target);
-    min-height: var(--modern-touch-target);
   }
 }
 </style>

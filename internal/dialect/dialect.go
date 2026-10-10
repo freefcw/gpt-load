@@ -19,14 +19,10 @@ type ParsedRequest struct {
 }
 
 type RequestMetadata struct {
-	Model          *string
-	Stream         bool
-	AffinityPrefix []byte
-	PromptCacheKey string `json:"-"`
-	// SessionID is an explicit client-provided session identity used only for
-	// soft account affinity. It is intentionally separate from AffinityPrefix:
-	// a prompt-derived continuity scope is not a Codex account session.
-	SessionID                string `json:"-"`
+	Model                    *string
+	Stream                   bool
+	AffinityPrefix           []byte
+	PromptCacheKey           string `json:"-"`
 	Operation                execution.Operation
 	RouteRequirement         execution.RouteRequirement
 	ResponsesStorePreference execution.ResponsesStorePreference
@@ -37,6 +33,10 @@ type RequestMetadata struct {
 	Reasoning                reasoning.Config
 	// AdvisorModels 是请求里 advisor 工具声明的模型，上游会按这些模型执行并计费。
 	AdvisorModels []string
+	// SessionID is an explicit client-provided session identity used only for
+	// soft account affinity. It is intentionally separate from AffinityPrefix:
+	// a prompt-derived continuity scope is not a Codex account session.
+	SessionID string `json:"-"`
 }
 
 type Dialect interface {

@@ -35,11 +35,11 @@ type GroupSettingsResponse struct {
 	ValidationModel            *string                      `json:"validation_model"`
 	Enabled                    bool                         `json:"enabled"`
 	WeightManual               *int                         `json:"weight_manual"`
-	CredentialRPMLimit         int64                        `json:"credential_rpm_limit"`
-	CredentialConcurrencyLimit int64                        `json:"credential_concurrency_limit"`
 	Overrides                  config.Settings              `json:"overrides"`
 	Effective                  GroupEffectiveConfigResponse `json:"effective"`
 	Proxy                      outboundproxy.View           `json:"proxy"`
+	CredentialRPMLimit         int64                        `json:"credential_rpm_limit"`
+	CredentialConcurrencyLimit int64                        `json:"credential_concurrency_limit"`
 }
 
 type GroupSettingsUpdateRequest struct {
@@ -51,10 +51,10 @@ type GroupSettingsUpdateRequest struct {
 	ValidationModel            optionalField[string]               `json:"validation_model"`
 	Enabled                    optionalField[bool]                 `json:"enabled"`
 	WeightManual               optionalField[int]                  `json:"weight_manual"`
-	CredentialRPMLimit         optionalField[int64]                `json:"credential_rpm_limit"`
-	CredentialConcurrencyLimit optionalField[int64]                `json:"credential_concurrency_limit"`
 	Overrides                  optionalField[config.Settings]      `json:"overrides"`
 	Proxy                      optionalField[outboundproxy.Config] `json:"proxy"`
+	CredentialRPMLimit         optionalField[int64]                `json:"credential_rpm_limit"`
+	CredentialConcurrencyLimit optionalField[int64]                `json:"credential_concurrency_limit"`
 }
 
 type normalizedGroupSettingsUpdate struct {
@@ -67,12 +67,12 @@ type normalizedGroupSettingsUpdate struct {
 	enabled                    *bool
 	weightManual               *int
 	weightManualSet            bool
-	credentialRPMLimit         *int64
-	credentialConcurrencyLimit *int64
 	encodedOverrides           models.JSON
 	overridesSet               bool
 	proxyConfig                *string
 	proxySet                   bool
+	credentialRPMLimit         *int64
+	credentialConcurrencyLimit *int64
 }
 
 func (s *Service) GetGroupSettings(ctx context.Context, groupID uint) (GroupSettingsResponse, error) {
@@ -163,10 +163,10 @@ func groupSettingsResponse(
 		ValidationModel:            cloneString(group.ValidationModel),
 		Enabled:                    group.Enabled,
 		WeightManual:               cloneInt(group.WeightManual),
-		CredentialRPMLimit:         group.CredentialRPMLimit,
-		CredentialConcurrencyLimit: group.CredentialConcurrencyLimit,
 		Overrides:                  overrides,
 		Effective:                  effective,
+		CredentialRPMLimit:         group.CredentialRPMLimit,
+		CredentialConcurrencyLimit: group.CredentialConcurrencyLimit,
 	}, nil
 }
 

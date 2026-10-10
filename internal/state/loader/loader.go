@@ -803,10 +803,10 @@ func mapSystemAndGroups(
 			Models:                     runtimeModels,
 			Settings:                   settings,
 			Priority:                   row.Priority,
-			CredentialRPMLimit:         row.CredentialRPMLimit,
-			CredentialConcurrencyLimit: row.CredentialConcurrencyLimit,
 			WeightManual:               cloneWeight(row.WeightManual),
 			Enabled:                    row.Enabled,
+			CredentialRPMLimit:         row.CredentialRPMLimit,
+			CredentialConcurrencyLimit: row.CredentialConcurrencyLimit,
 		}
 		if row.ProxyConfig != nil {
 			proxy, err := decodePersistedProxy(*row.ProxyConfig, encryptionService)

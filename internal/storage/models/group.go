@@ -19,8 +19,6 @@ type Group struct {
 	Params                     JSON           `gorm:"type:json;not null"`
 	Models                     JSON           `gorm:"type:json;not null"`
 	Priority                   int32          `gorm:"type:integer;not null;default:0"`
-	CredentialRPMLimit         int64          `gorm:"column:credential_rpm_limit;not null;default:0"`
-	CredentialConcurrencyLimit int64          `gorm:"column:credential_concurrency_limit;not null;default:0"`
 	WeightManual               *int
 	ValidationProtocol         *string      `gorm:"type:varchar(32)"`
 	ValidationModel            *string      `gorm:"type:varchar(255)"`
@@ -30,6 +28,8 @@ type Group struct {
 	Credentials                []Credential `gorm:"foreignKey:GroupID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 	CreatedAtMS                int64        `gorm:"column:created_at_ms;not null;autoCreateTime:milli;check:chk_group_created_at,created_at_ms >= 0"`
 	UpdatedAtMS                int64        `gorm:"column:updated_at_ms;not null;autoUpdateTime:milli;check:chk_group_updated_at,updated_at_ms >= 0"`
+	CredentialRPMLimit         int64        `gorm:"column:credential_rpm_limit;not null;default:0"`
+	CredentialConcurrencyLimit int64        `gorm:"column:credential_concurrency_limit;not null;default:0"`
 }
 
 // BeforeSave keeps channel parameters representable. Channel-specific shape
@@ -71,13 +71,13 @@ type Credential struct {
 	AuthState           CredentialAuthState `gorm:"type:varchar(32);not null;default:'ready';check:chk_credential_auth_state,auth_state IN ('ready','refreshing','reauthorization_required','outcome_unknown')"`
 	AuthErrorCode       string              `gorm:"type:varchar(64);not null;default:''"`
 	Status              CredentialStatus    `gorm:"type:varchar(32);not null;default:'active';check:chk_credential_status,status IN ('active','disabled')"`
-	RPMLimit            int64               `gorm:"column:rpm_limit;not null;default:0"`
-	ConcurrencyLimit    int64               `gorm:"column:concurrency_limit;not null;default:0"`
 	WeightManual        *int
 	ProxyConfig         *string `gorm:"column:proxy_config;type:text"`
 	Group               *Group  `gorm:"foreignKey:GroupID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 	CreatedAtMS         int64   `gorm:"column:created_at_ms;not null;autoCreateTime:milli;check:chk_credential_created_at,created_at_ms >= 0"`
 	UpdatedAtMS         int64   `gorm:"column:updated_at_ms;not null;autoUpdateTime:milli;check:chk_credential_updated_at,updated_at_ms >= 0"`
+	RPMLimit            int64   `gorm:"column:rpm_limit;not null;default:0"`
+	ConcurrencyLimit    int64   `gorm:"column:concurrency_limit;not null;default:0"`
 }
 
 type CredentialAuthState string

@@ -37,6 +37,7 @@ var (
 	reasonModelRequiredByFilter         = reason{Status: http.StatusBadRequest, Code: "model_required_by_filter", Message: "A model is required by the access key filter."}
 	reasonAdvisorModelUnavailable       = reason{Status: http.StatusBadRequest, Code: "advisor_model_unavailable", Message: "The advisor model must be provided by the selected group and allowed by the access key."}
 	reasonNoCandidate                   = reason{Status: http.StatusServiceUnavailable, Code: "no_available_candidate", Message: "No available upstream candidate."}
+	reasonCredentialRateLimited         = reason{Status: http.StatusTooManyRequests, Code: "credential_rate_limited", Message: "Local credential rate limit reached."}
 	reasonUpstreamRateLimited           = reason{Status: http.StatusTooManyRequests, Code: "upstream_rate_limited", Message: "Upstream rate limit exceeded."}
 	reasonUpstreamConnect               = reason{Status: http.StatusBadGateway, Code: "upstream_connect_failed", Message: "Could not connect to an upstream service."}
 	reasonUpstreamTimeout               = reason{Status: http.StatusGatewayTimeout, Code: "upstream_timeout", Message: "Upstream request timed out."}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -16,9 +17,41 @@ import (
 	"gpt-load/internal/channel"
 	"gpt-load/internal/dialect"
 	"gpt-load/internal/health"
+	"gpt-load/internal/platform/config"
 	"gpt-load/internal/state"
 	"gpt-load/internal/testutil/encryptiontest"
 )
+
+type mistralRealtimeSlotLimiter struct {
+	mu      sync.Mutex
+	rejects map[uint]bool
+	retryAt time.Time
+}
+
+func (limiter *mistralRealtimeSlotLimiter) Available(credentialID uint, _, _ int64) bool {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	return !limiter.rejects[credentialID]
+}
+
+func (limiter *mistralRealtimeSlotLimiter) RetryAfter(credentialID uint, _ int64) time.Time {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	if credentialID == 1 && limiter.rejects[credentialID] {
+		return limiter.retryAt
+	}
+	return time.Time{}
+}
+
+func (limiter *mistralRealtimeSlotLimiter) Acquire(credentialID uint, _, _ int64) (func(), bool) {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	if credentialID == 1 {
+		limiter.rejects[credentialID] = true
+		return nil, false
+	}
+	return func() {}, true
+}
 
 func TestMistralRealtimeCopiesFramesWithUpstreamKey(t *testing.T) {
 	t.Parallel()
@@ -265,6 +298,82 @@ func TestMistralRealtimeFinalRateLimitSetsRetryAfter(t *testing.T) {
 	_ = response.Body.Close()
 	if response.StatusCode != http.StatusTooManyRequests || response.Header.Get("Retry-After") == "" || !strings.Contains(string(body), "mistral_realtime_upstream_failed") {
 		t.Fatalf("status=%d retry=%q body=%s", response.StatusCode, response.Header.Get("Retry-After"), body)
+	}
+}
+
+func TestMistralRealtimeSlotRejectionSurvivesLaterHandshakeFailure(t *testing.T) {
+	t.Parallel()
+	var upstreamHits int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHits++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+
+	service := encryptiontest.Service(t, "mistral-realtime-slot-race-key")
+	params, err := json.Marshal(map[string]string{"base_url": upstream.URL + "/v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := state.CompileInput{
+		SystemSettings:  config.Settings{state.SettingRetryCount: 3},
+		ChannelRegistry: channel.NewRegistry(),
+		Groups: []state.GroupConfig{{
+			ID: 1, Name: "mistral", ConnectionType: "api_key", ChannelID: channel.Mistral,
+			Params: params, Models: []state.ModelConfig{{ID: "voxtral-mini-transcribe-realtime-2602", Alias: "public"}}, Enabled: true,
+		}},
+		Credentials: []state.CredentialConfig{
+			testCredentialConfig(1, 1),
+			testCredentialConfig(2, 1),
+		},
+		AccessKeys: []state.AccessKeyConfig{{ID: 1, Name: "client", KeyHash: service.Hash("gl-client"), Status: state.AccessKeyStatusActive}},
+	}
+	manager := state.NewManager()
+	if _, err := manager.Publish(input); err != nil {
+		t.Fatal(err)
+	}
+	registry := state.NewCredentialRegistry()
+	firstEntry := testCredentialEntry(t, service, 1, 1, "slot-rejected-key")
+	firstEntry.RPMLimit = 10
+	secondEntry := testCredentialEntry(t, service, 2, 1, "handshake-failed-key")
+	secondEntry.RPMLimit = 10
+	if err := registry.ReplaceCredentials([]state.CredentialEntry{firstEntry, secondEntry}); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(manager, registry, service, newTestExecutionForwarder(t), dialect.NewSet(dialect.NewMistral()), health.NewStatsStore(), health.NewMutationCoordinator(), nil, &recordingRequestLogSink{}, nil)
+	retryAt := time.Now().Add(30 * time.Second)
+	handler.credentialLimiter = &mistralRealtimeSlotLimiter{
+		rejects: make(map[uint]bool),
+		retryAt: retryAt,
+	}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	bindGatewayRoutesForTest(t, engine, handler)
+	gateway := httptest.NewServer(engine)
+	defer gateway.Close()
+
+	request, err := http.NewRequest(http.MethodGet, gateway.URL+"/v1/audio/transcriptions/realtime?model=public", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer gl-client")
+	request.Header.Set("Connection", "Upgrade")
+	request.Header.Set("Upgrade", "websocket")
+	request.Header.Set("Sec-WebSocket-Version", "13")
+	request.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusTooManyRequests ||
+		response.Header.Get("Retry-After") == "" ||
+		!strings.Contains(string(body), reasonCredentialRateLimited.Code) {
+		t.Fatalf("status=%d retry=%q body=%s", response.StatusCode, response.Header.Get("Retry-After"), body)
+	}
+	if upstreamHits != 1 {
+		t.Fatalf("upstream handshake attempts = %d, want 1", upstreamHits)
 	}
 }
 

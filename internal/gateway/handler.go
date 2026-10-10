@@ -185,17 +185,18 @@ func NewHandler(
 		manager: manager, channels: channels, subscriptions: subscriptions, registry: registry, encryption: encryptionService,
 		forwarder: forwarder, dialects: dialects, stats: stats, mutations: mutations,
 		limiter: limiter, requestLogSink: requestLogSink, priceTables: priceTables,
-		affinityCache:    affinity.NewCache(),
-		invalidLineage:   codexrecovery.NewInvalidLineage(),
-		responseBindings: state.NewResponseBindings(),
-		websocketLimits:  defaultWebsocketLimits(),
-		liveSessions:     newLiveSessions(),
-		newRequestID:     newRequestID,
-		requestNow:       time.Now,
-		now:              time.Now,
-		writeTimeout:     downstreamWriteTimeout,
-		modelListLimit:   maxNonStreamingResponseBodyBytes,
-		logger:           logrus.StandardLogger(),
+		affinityCache:     affinity.NewCache(),
+		invalidLineage:    codexrecovery.NewInvalidLineage(),
+		credentialLimiter: ratelimit.NewCredentialLimiter(),
+		responseBindings:  state.NewResponseBindings(),
+		websocketLimits:   defaultWebsocketLimits(),
+		liveSessions:      newLiveSessions(),
+		newRequestID:      newRequestID,
+		requestNow:        time.Now,
+		now:               time.Now,
+		writeTimeout:      downstreamWriteTimeout,
+		modelListLimit:    maxNonStreamingResponseBodyBytes,
+		logger:            logrus.StandardLogger(),
 		authFailureEvents: utils.NewRateLimitedEventCounter(
 			time.Minute,
 			time.Now,
@@ -278,6 +279,8 @@ type credentialSlotLimiter interface {
 type unlimitedCredentialLimiter struct{}
 
 func (unlimitedCredentialLimiter) Available(uint, int64, int64) bool { return true }
+
+func (unlimitedCredentialLimiter) RetryAfter(uint, int64) time.Time { return time.Time{} }
 
 func (unlimitedCredentialLimiter) Acquire(uint, int64, int64) (func(), bool) {
 	return func() {}, true
@@ -975,6 +978,8 @@ func (handler *Handler) executeAttempts(
 	lastAttemptIndex := -1
 	attemptSequence := 0
 	forwardAttempts := 0
+	credentialSlotRejected := make(map[uint]struct{})
+	credentialSlotRetried := make(map[uint]struct{})
 	type credentialRefreshRetry struct {
 		selection scheduler.Selection
 		ref       state.CredentialRef
@@ -1426,13 +1431,21 @@ func (handler *Handler) executeAttempts(
 				return
 			}
 		}
-		// 凭据本地名额在调度后立即扣减。调度器已过滤满额凭据，这里仍可能因并发竞争失败，
-		// 失败视同该候选不可用，换下一条凭据。RPM 不回滚，并发随请求结束归还。
+		// 凭据本地名额在调度后立即扣减。调度器已过滤满额凭据，这里仍可能因并发竞争失败；
+		// 首次竞争失败回到调度器重试一次，避免把短暂竞争直接升级为整次请求限流。
+		// RPM 不回滚，并发随请求结束归还。
 		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
 		if !acquired {
 			releaseGroup()
+			credentialSlotRejected[selection.CredentialID] = struct{}{}
+			if _, retried := credentialSlotRetried[selection.CredentialID]; !retried {
+				credentialSlotRetried[selection.CredentialID] = struct{}{}
+				iterator.RetryCredential(selection.CredentialID)
+				continue
+			}
 			continue
 		}
+		delete(credentialSlotRejected, selection.CredentialID)
 		// 异常退出也收尾；普通路径在本次执行结束后立即归还，幂等保护防止重复释放。
 		defer releaseGroup()
 		defer releaseCredential()
@@ -1516,6 +1529,7 @@ func (handler *Handler) executeAttempts(
 			result = handler.forwarder.Forward(ginContext.Request.Context(), input)
 		}
 		releaseGroup()
+		releaseCredential()
 		result = normalizeUpstreamResultContract(result)
 		if !stream && result.HasResponse() && !result.ProviderErrorBeforeCommit &&
 			result.DispatchState != execution.DispatchLocal &&
@@ -1923,6 +1937,11 @@ func (handler *Handler) executeAttempts(
 	if until, limited := iterator.CooldownUntil(); limited {
 		setCooldownRetryAfter(ginContext, until, handler.now())
 		handler.completeReason(ginContext, recorder, reasonUpstreamRateLimited)
+		return
+	}
+	if until, limited := iterator.CredentialLimitedUntil(); limited || len(credentialSlotRejected) > 0 {
+		setCooldownRetryAfter(ginContext, until, handler.now())
+		handler.completeReason(ginContext, recorder, reasonCredentialRateLimited)
 		return
 	}
 	handler.completeReason(ginContext, recorder, reasonNoCandidate)

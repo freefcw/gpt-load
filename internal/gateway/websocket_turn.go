@@ -417,6 +417,11 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 					s.emitReasonUntil(turn.lane, reasonUpstreamRateLimited, until)
 					return
 				}
+				if until, limited := iterator.CredentialLimitedUntil(); limited {
+					recorder.completeReason(reasonCredentialRateLimited)
+					s.emitReasonUntil(turn.lane, reasonCredentialRateLimited, until)
+					return
+				}
 				reject(reasonNoCandidate)
 				return
 			}
@@ -582,7 +587,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		releaseCredential, acquired := h.acquireCredentialSlot(selection)
 		if !acquired {
 			releaseGroup()
-			reject(reasonNoCandidate)
+			reject(reasonCredentialRateLimited)
 			return
 		}
 		defer releaseCredential()

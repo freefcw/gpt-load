@@ -28,6 +28,7 @@ import { useApiClient } from '@shared/http/client-context'
 import { credentialStatus, credentialTime } from './credential-presentation'
 import { validProxySelection } from '@shared/proxies/api'
 import ProxySelect from '../proxies/ProxySelect.vue'
+import CredentialLimitFields from './CredentialLimitFields.vue'
 import GroupWorkspacePanel from './GroupWorkspacePanel.vue'
 import CredentialAccountInfo from './CredentialAccountInfo.vue'
 import CredentialTrends from './CredentialTrends.vue'
@@ -349,27 +350,20 @@ useMessageSource(() =>
           :disabled="saving"
           :error="attempted && weightInvalid ? t('groups.edit.weightError') : undefined"
         />
-        <AppTextField
-          v-model="rpmLimit"
-          :label="t('credentialCards.limits.rpm')"
-          :placeholder="limitPlaceholder(saved?.groupRpmLimit ?? 0)"
-          size="sm"
-          inputmode="numeric"
-          :disabled="saving"
-          :error="attempted && rpmInvalid ? t('credentialCards.limits.invalid') : undefined"
-        />
-        <AppTextField
-          v-model="concurrencyLimit"
-          :label="t('credentialCards.limits.concurrency')"
-          :placeholder="limitPlaceholder(saved?.groupConcurrencyLimit ?? 0)"
-          size="sm"
-          inputmode="numeric"
-          :disabled="saving"
-          :error="
+        <CredentialLimitFields
+          v-model:rpm="rpmLimit"
+          v-model:concurrency="concurrencyLimit"
+          :title="t('credentialCards.limits.title')"
+          :hint="t('credentialCards.limits.hint')"
+          :rpm-placeholder="limitPlaceholder(saved?.groupRpmLimit ?? 0)"
+          :concurrency-placeholder="limitPlaceholder(saved?.groupConcurrencyLimit ?? 0)"
+          :rpm-error="attempted && rpmInvalid ? t('credentialCards.limits.invalid') : undefined"
+          :concurrency-error="
             attempted && concurrencyInvalid ? t('credentialCards.limits.invalid') : undefined
           "
+          :summary="effectiveLimitSummary"
+          :disabled="saving"
         />
-        <p class="modern-credential-detail-limit-hint">{{ effectiveLimitSummary }}</p>
         <AppFormSection v-if="channel?.proxy" compact :title="t('groupCreate.proxy')">
           <template #actions>
             <AppSegmentedControl
@@ -409,11 +403,6 @@ useMessageSource(() =>
 .modern-credential-detail-section h3 {
   font-size: var(--modern-font-size-section);
   font-weight: var(--modern-weight-semibold);
-}
-.modern-credential-detail-limit-hint {
-  margin: 0;
-  color: var(--modern-muted);
-  font-size: var(--modern-font-size-small);
 }
 .modern-credential-detail-title {
   display: flex;

@@ -5,6 +5,7 @@ import { useMessageSource } from '@modern/app/messages'
 import { useI18n } from 'vue-i18n'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import AppDraftGuard from '@modern/components/AppDraftGuard.vue'
+import CredentialLimitFields from './CredentialLimitFields.vue'
 import GroupDeleteAction from './GroupDeleteAction.vue'
 import {
   updateGroupBasics,
@@ -260,31 +261,24 @@ useMessageSource(() =>
             :disabled="saving"
             :error="attempted && weightInvalid ? t('groups.edit.weightError') : undefined"
           />
-          <AppTextField
-            v-model="credentialRpmLimit"
-            :label="t('credentialCards.limits.rpm')"
-            :placeholder="t('credentialCards.limits.unlimited')"
-            size="sm"
-            inputmode="numeric"
-            :disabled="saving"
-            :error="
-              attempted && credentialRpmInvalid ? t('credentialCards.limits.invalid') : undefined
-            "
-          />
-          <AppTextField
-            v-model="credentialConcurrencyLimit"
-            :label="t('credentialCards.limits.concurrency')"
-            :placeholder="t('credentialCards.limits.unlimited')"
-            size="sm"
-            inputmode="numeric"
-            :disabled="saving"
-            :error="
-              attempted && credentialConcurrencyInvalid
-                ? t('credentialCards.limits.invalid')
-                : undefined
-            "
-          />
         </div>
+        <CredentialLimitFields
+          v-model:rpm="credentialRpmLimit"
+          v-model:concurrency="credentialConcurrencyLimit"
+          :title="t('groupDetail.credentialLimits')"
+          :hint="t('groupDetail.credentialLimitsHint')"
+          :rpm-placeholder="t('credentialCards.limits.unlimited')"
+          :concurrency-placeholder="t('credentialCards.limits.unlimited')"
+          :rpm-error="
+            attempted && credentialRpmInvalid ? t('credentialCards.limits.invalid') : undefined
+          "
+          :concurrency-error="
+            attempted && credentialConcurrencyInvalid
+              ? t('credentialCards.limits.invalid')
+              : undefined
+          "
+          :disabled="saving"
+        />
         <AppTextField
           ref="priceInput"
           v-model="price"

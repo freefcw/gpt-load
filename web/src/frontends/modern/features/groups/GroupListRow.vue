@@ -310,6 +310,7 @@ const lastActive = computed(() =>
           @update:model-value="emit('toggle', $event)"
         />
         <AppInlineNumber
+          popover
           :model-value="group.priority"
           :label="t('groups.edit.priority')"
           :min="-2147483648"
@@ -323,6 +324,7 @@ const lastActive = computed(() =>
           @clear-error="emit('clearPriorityError')"
         />
         <AppInlineNumber
+          popover
           :model-value="group.weight"
           :label="t('groups.edit.weight')"
           :min="1"

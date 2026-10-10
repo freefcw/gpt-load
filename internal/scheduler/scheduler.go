@@ -43,6 +43,7 @@ type Query struct {
 // 名额扣减由网关在拿到 Selection 后立即完成，调度器只负责把满额凭据排除出候选池。
 type CredentialLimiter interface {
 	Available(credentialID uint, rpmLimit, concurrencyLimit int64) bool
+	RetryAfter(credentialID uint, rpmLimit int64) time.Time
 }
 
 type Selection struct {
@@ -78,22 +79,24 @@ type candidatePool struct {
 }
 
 type Iterator struct {
-	snapshot              *state.ConfigSnapshot
-	query                 Query
-	operation             execution.Operation
-	credentials           CredentialSource
-	progress              *state.SchedulingState
-	regular               candidatePool
-	storeDowngraded       candidatePool
-	routeModeTiers        [][]channel.RouteMode
-	allowedCredentialIDs  map[uint]struct{}
-	preferredCredentialID uint
-	tried                 map[uint]struct{}
-	skippedGroups         map[uint]struct{}
-	allowedCredentialRefs map[uint]credentialIdentity
-	staticReason          ReasonCode
-	limiter               CredentialLimiter
-	now                   func() time.Time
+	snapshot               *state.ConfigSnapshot
+	query                  Query
+	operation              execution.Operation
+	credentials            CredentialSource
+	progress               *state.SchedulingState
+	regular                candidatePool
+	storeDowngraded        candidatePool
+	routeModeTiers         [][]channel.RouteMode
+	allowedCredentialIDs   map[uint]struct{}
+	preferredCredentialID  uint
+	tried                  map[uint]struct{}
+	skippedGroups          map[uint]struct{}
+	allowedCredentialRefs  map[uint]credentialIdentity
+	staticReason           ReasonCode
+	limiter                CredentialLimiter
+	credentialLimited      bool
+	credentialLimitedUntil time.Time
+	now                    func() time.Time
 }
 
 type normalizedQuery struct {
@@ -229,6 +232,16 @@ func (iterator *Iterator) SkipGroup(groupID uint) {
 	iterator.skippedGroups[groupID] = struct{}{}
 }
 
+// RetryCredential re-enables one selection after a last-moment slot race.
+// The caller should use this at most once per credential before trying the
+// remaining candidates, otherwise a persistently full slot could spin.
+func (iterator *Iterator) RetryCredential(credentialID uint) {
+	if iterator == nil || credentialID == 0 {
+		return
+	}
+	delete(iterator.tried, credentialID)
+}
+
 // AdvancePriority 记录可重试的执行失败，下一次换目标时降档；刷新重放不经 Next。
 func (iterator *Iterator) AdvancePriority(selection Selection) {
 	if iterator == nil {
@@ -289,15 +302,12 @@ func (iterator *Iterator) withWeightedPool(candidates *candidatePool, modes []ch
 			if _, skipped := iterator.skippedGroups[credential.GroupID]; skipped {
 				continue
 			}
-			if iterator.limiter != nil && !iterator.credentialAvailable(credential, candidates) {
-				continue
-			}
 			for _, target := range candidates.targetsByGroup[credential.GroupID] {
 				if !iterator.targetAvailable(target, credential, modes, now) {
 					continue
 				}
 				weight := effectiveWeight(target.group.WeightManual, credential.WeightManual)
-				if weight > 0 {
+				if weight > 0 && iterator.credentialAvailable(credential, target.group) {
 					weighted = append(weighted, weightedCredential{meta: credential, weight: weight})
 				}
 				break
@@ -504,16 +514,30 @@ func newSelection(credential state.CredentialMeta, target candidateTarget) Selec
 }
 
 // credentialAvailable 按“凭据自身值优先、否则继承分组默认值”解析限额，
-// 满额凭据不进候选池，调度器自然换号。分组内任一目标的限额相同，取第一个即可。
-func (iterator *Iterator) credentialAvailable(credential state.CredentialMeta, pool *candidatePool) bool {
-	targets := pool.targetsByGroup[credential.GroupID]
-	if len(targets) == 0 {
+// 满额凭据不进候选池，调度器自然换号；同时记录最早的 RPM 恢复时刻。
+func (iterator *Iterator) credentialAvailable(credential state.CredentialMeta, group state.GroupView) bool {
+	if iterator.limiter == nil {
 		return true
 	}
-	group := targets[0].group
 	rpm := state.EffectiveCredentialLimit(group.CredentialRPMLimit, credential.RPMLimit)
 	concurrency := state.EffectiveCredentialLimit(group.CredentialConcurrencyLimit, credential.ConcurrencyLimit)
-	return iterator.limiter.Available(credential.ID, rpm, concurrency)
+	if iterator.limiter.Available(credential.ID, rpm, concurrency) {
+		return true
+	}
+	iterator.credentialLimited = true
+	if until := iterator.limiter.RetryAfter(credential.ID, rpm); !until.IsZero() &&
+		(iterator.credentialLimitedUntil.IsZero() || until.Before(iterator.credentialLimitedUntil)) {
+		iterator.credentialLimitedUntil = until
+	}
+	return false
+}
+
+// CredentialLimitedUntil 报告是否有候选因凭据本地限额被排除，以及最早的 RPM 恢复时刻；只有并发满额时恢复时刻未知，返回零值。
+func (iterator *Iterator) CredentialLimitedUntil() (time.Time, bool) {
+	if iterator == nil || !iterator.credentialLimited {
+		return time.Time{}, false
+	}
+	return iterator.credentialLimitedUntil, true
 }
 
 func optionalModel(value string) *string {

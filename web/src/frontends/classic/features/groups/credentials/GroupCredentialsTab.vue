@@ -1619,6 +1619,26 @@ async function saveCredentialName(item: CredentialItemDto, name: string): Promis
   }
 }
 
+async function saveCredentialLimit(
+  item: CredentialItemDto,
+  key: 'rpm_limit' | 'concurrency_limit',
+  value: number,
+): Promise<void> {
+  if (batchBusy.value || pending(item.credential_id)) {
+    throw new Error('CREDENTIAL_LIMIT_UNAVAILABLE')
+  }
+  feedback.value = ''
+  setPending(item.credential_id, key, true)
+  try {
+    const result = await updateCredential(client, props.groupId, item.credential_id, {
+      [key]: value,
+    })
+    await reconcileItem(result, false)
+  } finally {
+    setPending(item.credential_id, key, false)
+  }
+}
+
 async function saveCredentialProxy(item: CredentialItemDto, value: ProxyMutation): Promise<void> {
   if (batchBusy.value || pending(item.credential_id)) {
     throw new Error('CREDENTIAL_PROXY_UNAVAILABLE')
@@ -2025,6 +2045,7 @@ async function runBatch(
               :capabilities="channelCapabilities"
               :save-proxy="(value) => saveCredentialProxy(item, value)"
               :save-name="(value) => saveCredentialName(item, value)"
+              :save-limit="(key, value) => saveCredentialLimit(item, key, value)"
               @update:selected="setSelected(item.credential_id, $event)"
               @toggle="mutateItem($event, 'toggle')"
               @restore="mutateItem($event, 'restore')"
@@ -2072,6 +2093,7 @@ async function runBatch(
             :resolve-copy-value="resolveCopyValue"
             :save-proxy="(value) => saveCredentialProxy(item, value)"
             :save-name="(value) => saveCredentialName(item, value)"
+            :save-limit="(key, value) => saveCredentialLimit(item, key, value)"
             :proxy-supported="channelCapabilities.outbound_proxy"
             @update:selected="setSelected(item.credential_id, $event)"
             @update:expanded="setExpanded(item.credential_id, $event)"

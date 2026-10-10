@@ -48,6 +48,8 @@ const saved = ref<CredentialRow>()
 const nameDirty = ref(false)
 const namePending = ref(false)
 const weight = ref('')
+const rpmLimit = ref('')
+const concurrencyLimit = ref('')
 const proxyMode = ref('inherit')
 const proxyID = ref('')
 const saving = ref(false)
@@ -61,6 +63,8 @@ const dirty = computed(
     Boolean(saved.value) &&
     (nameDirty.value ||
       weight.value !== String(saved.value!.weightManual ?? '') ||
+      limitValue(rpmLimit.value) !== saved.value!.rpmLimit ||
+      limitValue(concurrencyLimit.value) !== saved.value!.concurrencyLimit ||
       proxyMode.value !== saved.value!.proxy.mode ||
       (Boolean(proxyID.value) && Number(proxyID.value) !== saved.value?.proxy.id)),
 )
@@ -70,11 +74,42 @@ watch(
     if (!value || dirty.value || saving.value) return
     saved.value = value
     weight.value = String(value.weightManual ?? '')
+    rpmLimit.value = value.rpmLimit === 0 ? '' : String(value.rpmLimit)
+    concurrencyLimit.value = value.concurrencyLimit === 0 ? '' : String(value.concurrencyLimit)
     proxyMode.value = value.proxy.mode
     proxyID.value = ''
   },
   { immediate: true },
 )
+// 留空按 0 处理，0 表示继承分组默认限额。
+function limitValue(value: string): number {
+  return value.trim() === '' ? 0 : Number(value.trim())
+}
+function limitInvalid(value: string): boolean {
+  const parsed = limitValue(value)
+  return !Number.isSafeInteger(parsed) || parsed < 0
+}
+const rpmInvalid = computed(() => limitInvalid(rpmLimit.value))
+const concurrencyInvalid = computed(() => limitInvalid(concurrencyLimit.value))
+function limitPlaceholder(groupLimit: number): string {
+  return groupLimit > 0
+    ? t('credentialCards.limits.inheritPlaceholder', { value: n(groupLimit) })
+    : t('credentialCards.limits.unlimited')
+}
+const effectiveLimitSummary = computed(() => {
+  const row = saved.value
+  if (!row) return ''
+  const describe = (own: number, effective: number) =>
+    effective <= 0
+      ? t('credentialCards.limits.unlimited')
+      : own > 0
+        ? n(effective)
+        : t('credentialCards.limits.inheritedValue', { value: n(effective) })
+  return t('credentialCards.limits.effectiveSummary', {
+    rpm: describe(row.rpmLimit, row.effectiveRpmLimit),
+    concurrency: describe(row.concurrencyLimit, row.effectiveConcurrencyLimit),
+  })
+})
 const weightInvalid = computed(
   () =>
     Boolean(weight.value) &&
@@ -108,10 +143,15 @@ function failure(): string {
 async function save(): Promise<void> {
   if (!saved.value || !dirty.value || saving.value) return
   attempted.value = true
-  if (weightInvalid.value || proxyInvalid.value) return
+  if (weightInvalid.value || rpmInvalid.value || concurrencyInvalid.value || proxyInvalid.value)
+    return
   const patch: Parameters<typeof updateCredential>[3] = {}
   if (weight.value !== String(saved.value.weightManual ?? ''))
     patch.weight_manual = weight.value ? Number(weight.value) : null
+  if (limitValue(rpmLimit.value) !== saved.value.rpmLimit)
+    patch.rpm_limit = limitValue(rpmLimit.value)
+  if (limitValue(concurrencyLimit.value) !== saved.value.concurrencyLimit)
+    patch.concurrency_limit = limitValue(concurrencyLimit.value)
   if (proxyChanged.value)
     patch.proxy =
       proxyMode.value === 'inherit'
@@ -309,6 +349,27 @@ useMessageSource(() =>
             :disabled="saving"
             :error="attempted && weightInvalid ? t('groups.edit.weightError') : undefined"
           />
+          <AppTextField
+            v-model="rpmLimit"
+            :label="t('credentialCards.limits.rpm')"
+            :placeholder="limitPlaceholder(saved?.groupRpmLimit ?? 0)"
+            size="sm"
+            inputmode="numeric"
+            :disabled="saving"
+            :error="attempted && rpmInvalid ? t('credentialCards.limits.invalid') : undefined"
+          />
+          <AppTextField
+            v-model="concurrencyLimit"
+            :label="t('credentialCards.limits.concurrency')"
+            :placeholder="limitPlaceholder(saved?.groupConcurrencyLimit ?? 0)"
+            size="sm"
+            inputmode="numeric"
+            :disabled="saving"
+            :error="
+              attempted && concurrencyInvalid ? t('credentialCards.limits.invalid') : undefined
+            "
+          />
+          <p class="modern-credential-detail-limit-hint">{{ effectiveLimitSummary }}</p>
           <AppSegmentedField
             v-if="channel?.proxy"
             v-model="proxyMode"
@@ -345,6 +406,11 @@ useMessageSource(() =>
 .modern-credential-detail-section h3 {
   font-size: var(--modern-font-size-section);
   font-weight: var(--modern-weight-semibold);
+}
+.modern-credential-detail-limit-hint {
+  margin: 0;
+  color: var(--modern-muted);
+  font-size: var(--modern-font-size-small);
 }
 .modern-credential-detail-title {
   display: flex;

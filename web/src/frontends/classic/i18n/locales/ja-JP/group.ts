@@ -325,6 +325,13 @@ export default {
         auto: '自動',
         manual: '手動',
         weightError: '1～100 の整数を入力してください',
+        credentialRpmLimit: '認証情報の1分あたりリクエスト上限',
+        credentialRpmLimitHint:
+          'このグループの認証情報に適用する既定の上限です。空欄は無制限。個別の認証情報で上書きできます。',
+        credentialConcurrencyLimit: '認証情報の同時実行上限',
+        credentialConcurrencyLimitHint:
+          'このグループの認証情報に適用する既定の同時実行数です。空欄は無制限。個別の認証情報で上書きできます。',
+        credentialLimitUnlimited: '無制限',
         enabled: 'グループを有効化',
         enabledHelp: '無効にすると新しいリクエストではこのグループを選択しません',
       },
@@ -442,6 +449,14 @@ export default {
       weightFor: '{mask} のウェイト',
       weight: '{weight}',
       editWeight: 'ウェイトを編集',
+      limits: {
+        rpm: '1分あたりのリクエスト上限',
+        concurrency: '同時実行上限',
+        inherited: 'グループ既定',
+        unlimited: '無制限',
+        hint: '空欄ではグループの既定値を使います。入力するとこの認証情報だけ上書きします。',
+        invalid: '0 または正の整数を入力してください。空欄はグループ既定値です。',
+      },
       weightEditor: {
         title: 'スケジューリングウェイト',
         value: 'ウェイト',

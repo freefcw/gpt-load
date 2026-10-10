@@ -325,6 +325,13 @@ export default {
         auto: 'Auto',
         manual: 'Manual',
         weightError: 'Enter a whole number from 1 to 100',
+        credentialRpmLimit: 'Credential requests per minute',
+        credentialRpmLimitHint:
+          'Default for credentials in this Group. Leave empty for no limit; a credential can override it.',
+        credentialConcurrencyLimit: 'Credential concurrency',
+        credentialConcurrencyLimitHint:
+          'Default concurrency for credentials in this Group. Leave empty for no limit; a credential can override it.',
+        credentialLimitUnlimited: 'No limit',
         enabled: 'Group enabled',
         enabledHelp: 'When disabled, new requests no longer select this Group',
       },
@@ -441,6 +448,14 @@ export default {
       weightFor: 'Weight for {mask}',
       weight: '{weight}',
       editWeight: 'Edit weight',
+      limits: {
+        rpm: 'Requests per minute',
+        concurrency: 'Concurrency',
+        inherited: 'Group default',
+        unlimited: 'No limit',
+        hint: 'Leave empty to use the Group default. A value here overrides it for this credential only.',
+        invalid: 'Enter 0 or a positive whole number. Leave empty to use the Group default.',
+      },
       weightEditor: {
         title: 'Scheduling weight',
         value: 'Weight',

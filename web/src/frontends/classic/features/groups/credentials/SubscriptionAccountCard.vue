@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CredentialDisplay from '@/components/CredentialDisplay.vue'
+import CredentialLimitEditor from './CredentialLimitEditor.vue'
 import CredentialNameEditor from './CredentialNameEditor.vue'
 import {
   Check,
@@ -57,6 +58,7 @@ const props = withDefaults(
     capabilities: ChannelCapabilitiesDto
     saveProxy: (value: ProxyMutation) => Promise<void>
     saveName: (value: string) => Promise<string>
+    saveLimit: (key: 'rpm_limit' | 'concurrency_limit', value: number) => Promise<void>
   }>(),
   {
     channelIcon: undefined,
@@ -1379,6 +1381,30 @@ function runMenuAction(
           </div>
         </div>
 
+        <CredentialLimitEditor
+          :value="item.rpm_limit"
+          :group-limit="item.group_rpm_limit"
+          :effective-limit="item.effective_rpm_limit"
+          :disabled="busy || displayDisabled"
+          :label="t('group.credentials.limits.rpm')"
+          :inherited-label="t('group.credentials.limits.inherited')"
+          :unlimited-label="t('group.credentials.limits.unlimited')"
+          :hint="t('group.credentials.limits.hint')"
+          :invalid-label="t('group.credentials.limits.invalid')"
+          :save="(value) => saveLimit('rpm_limit', value)"
+        />
+        <CredentialLimitEditor
+          :value="item.concurrency_limit"
+          :group-limit="item.group_concurrency_limit"
+          :effective-limit="item.effective_concurrency_limit"
+          :disabled="busy || displayDisabled"
+          :label="t('group.credentials.limits.concurrency')"
+          :inherited-label="t('group.credentials.limits.inherited')"
+          :unlimited-label="t('group.credentials.limits.unlimited')"
+          :hint="t('group.credentials.limits.hint')"
+          :invalid-label="t('group.credentials.limits.invalid')"
+          :save="(value) => saveLimit('concurrency_limit', value)"
+        />
         <ProxyConfigEditor
           ref="proxyEditor"
           :view="item.proxy"
@@ -2003,7 +2029,9 @@ function runMenuAction(
 }
 .subscription-account__panels {
   display: grid;
-  gap: 13px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 13px 16px;
   margin-top: 13px;
 }
 .subscription-account__weight-chip {
@@ -2221,6 +2249,9 @@ function runMenuAction(
   }
   .subscription-account__diagnostics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .subscription-account__panels {
+    grid-template-columns: 1fr;
   }
 }
 @media (prefers-reduced-motion: reduce) {

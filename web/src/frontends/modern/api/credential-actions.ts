@@ -24,7 +24,14 @@ export async function updateCredential(
   client: ApiClient,
   group: number,
   id: number,
-  patch: { name?: string; weight_manual?: number | null; proxy?: ProxyOverride | null },
+  patch: {
+    name?: string
+    weight_manual?: number | null
+    // 0 表示继承分组默认限额。
+    rpm_limit?: number
+    concurrency_limit?: number
+    proxy?: ProxyOverride | null
+  },
   signal: AbortSignal,
 ) {
   const row = readCredential(

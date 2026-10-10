@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CredentialDisplay from '@/components/CredentialDisplay.vue'
+import CredentialLimitEditor from './CredentialLimitEditor.vue'
 import CredentialNameEditor from './CredentialNameEditor.vue'
 import {
   Activity,
@@ -38,6 +39,7 @@ const props = defineProps<{
   resolveCopyValue: (id: number) => Promise<string>
   saveProxy: (value: ProxyMutation) => Promise<void>
   saveName: (value: string) => Promise<string>
+  saveLimit: (key: 'rpm_limit' | 'concurrency_limit', value: number) => Promise<void>
   proxySupported: boolean
 }>()
 const emit = defineEmits<{
@@ -336,6 +338,30 @@ function runMenuAction(action: 'test' | 'toggle' | 'restore' | 'remove'): void {
               </div>
             </div>
 
+            <CredentialLimitEditor
+              :value="item.rpm_limit"
+              :group-limit="item.group_rpm_limit"
+              :effective-limit="item.effective_rpm_limit"
+              :disabled="busy || item.configured_status === 'disabled'"
+              :label="t('group.credentials.limits.rpm')"
+              :inherited-label="t('group.credentials.limits.inherited')"
+              :unlimited-label="t('group.credentials.limits.unlimited')"
+              :hint="t('group.credentials.limits.hint')"
+              :invalid-label="t('group.credentials.limits.invalid')"
+              :save="(value) => saveLimit('rpm_limit', value)"
+            />
+            <CredentialLimitEditor
+              :value="item.concurrency_limit"
+              :group-limit="item.group_concurrency_limit"
+              :effective-limit="item.effective_concurrency_limit"
+              :disabled="busy || item.configured_status === 'disabled'"
+              :label="t('group.credentials.limits.concurrency')"
+              :inherited-label="t('group.credentials.limits.inherited')"
+              :unlimited-label="t('group.credentials.limits.unlimited')"
+              :hint="t('group.credentials.limits.hint')"
+              :invalid-label="t('group.credentials.limits.invalid')"
+              :save="(value) => saveLimit('concurrency_limit', value)"
+            />
             <ProxyConfigEditor
               :view="item.proxy"
               :save-proxy="saveProxy"

@@ -33,6 +33,8 @@ const props = defineProps<{
   models: GroupModelItemDto[]
   priority: string
   weightManual: number | null
+  credentialRpmLimit: number
+  credentialConcurrencyLimit: number
   priceMultiplier: string
   enabled: boolean
   pending: boolean
@@ -48,6 +50,8 @@ const emit = defineEmits<{
   'update:validationModel': [value: string | null]
   'update:priority': [value: string]
   'update:weightManual': [value: number | null]
+  'update:credentialRpmLimit': [value: number]
+  'update:credentialConcurrencyLimit': [value: number]
   'update:priceMultiplier': [value: string]
   'update:enabled': [value: boolean]
 }>()
@@ -62,6 +66,14 @@ const validationModelOptions = computed(() =>
     .map(({ id, alias, alias_enabled }) => ({ id, alias: alias_enabled ? alias : '' }))
     .sort((left, right) => left.id.localeCompare(right.id)),
 )
+// 分组限额 0 表示不限，输入框留空即是 0。
+function parseLimit(raw: string): number {
+  const trimmed = raw.trim()
+  if (trimmed === '') return 0
+  const value = Number(trimmed)
+  return Number.isSafeInteger(value) && value >= 0 ? value : Number.NaN
+}
+
 const weightValid = computed(
   () =>
     props.weightManual === null ||
@@ -275,6 +287,47 @@ function parameterPlaceholder(field: ChannelFieldDto): string | undefined {
           />
         </div>
         <small v-if="!weightValid" role="alert">{{ t('group.settings.base.weightError') }}</small>
+      </div>
+      <div class="group-settings__field">
+        <span>{{ t('group.settings.base.credentialRpmLimit') }}</span>
+        <div class="group-settings__weight-editor">
+          <input
+            class="group-settings__mono"
+            type="number"
+            min="0"
+            step="1"
+            inputmode="numeric"
+            :value="credentialRpmLimit === 0 ? '' : credentialRpmLimit"
+            :placeholder="t('group.settings.base.credentialLimitUnlimited')"
+            :disabled="pending"
+            :aria-label="t('group.settings.base.credentialRpmLimit')"
+            @input="emit('update:credentialRpmLimit', parseLimit(($event.target as HTMLInputElement).value))"
+          />
+        </div>
+        <small>{{ t('group.settings.base.credentialRpmLimitHint') }}</small>
+      </div>
+      <div class="group-settings__field">
+        <span>{{ t('group.settings.base.credentialConcurrencyLimit') }}</span>
+        <div class="group-settings__weight-editor">
+          <input
+            class="group-settings__mono"
+            type="number"
+            min="0"
+            step="1"
+            inputmode="numeric"
+            :value="credentialConcurrencyLimit === 0 ? '' : credentialConcurrencyLimit"
+            :placeholder="t('group.settings.base.credentialLimitUnlimited')"
+            :disabled="pending"
+            :aria-label="t('group.settings.base.credentialConcurrencyLimit')"
+            @input="
+              emit(
+                'update:credentialConcurrencyLimit',
+                parseLimit(($event.target as HTMLInputElement).value),
+              )
+            "
+          />
+        </div>
+        <small>{{ t('group.settings.base.credentialConcurrencyLimitHint') }}</small>
       </div>
     </div>
   </section>

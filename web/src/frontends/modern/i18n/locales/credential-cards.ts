@@ -137,6 +137,17 @@ export const zhCN = {
     network: '网络错误',
     model: '模型不可用',
   },
+  limits: {
+    title: '本地限额',
+    hint: '留空或填 0 继承分组默认限额；分组本身不限时，继承即不限。',
+    rpm: '每分钟请求数',
+    concurrency: '最大并发',
+    invalid: '请输入非负整数。',
+    unlimited: '不限',
+    inheritPlaceholder: '继承 {value}',
+    inheritedValue: '{value}（继承分组）',
+    effectiveSummary: '生效：每分钟 {rpm} · 并发 {concurrency}',
+  },
 }
 export const enUS: typeof zhCN = {
   name: 'Name',
@@ -282,6 +293,17 @@ export const enUS: typeof zhCN = {
     network: 'Network error',
     model: 'Model unavailable',
   },
+  limits: {
+    title: 'Per-credential limits',
+    hint: 'Leave empty or enter 0 to use the group default. When the group is unlimited, inheriting means unlimited.',
+    rpm: 'Requests per minute',
+    concurrency: 'Max concurrency',
+    invalid: 'Enter a non-negative integer.',
+    unlimited: 'Unlimited',
+    inheritPlaceholder: 'Inherit {value}',
+    inheritedValue: '{value} (inherited from group)',
+    effectiveSummary: 'Effective: {rpm} per minute · concurrency {concurrency}',
+  },
 }
 export const jaJP: typeof zhCN = {
   name: '名前',
@@ -422,5 +444,16 @@ export const jaJP: typeof zhCN = {
     upstream: '上流エラー',
     network: 'ネットワークエラー',
     model: 'モデル利用不可',
+  },
+  limits: {
+    title: '個別上限',
+    hint: '空欄または 0 はグループの既定値を継承します。グループが無制限なら継承も無制限です。',
+    rpm: '毎分リクエスト数',
+    concurrency: '最大同時実行数',
+    invalid: '0 以上の整数を入力してください。',
+    unlimited: '無制限',
+    inheritPlaceholder: '継承 {value}',
+    inheritedValue: '{value}（グループ継承）',
+    effectiveSummary: '実効：毎分 {rpm} · 同時実行 {concurrency}',
   },
 }

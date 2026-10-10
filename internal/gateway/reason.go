@@ -36,6 +36,7 @@ var (
 	reasonResponseBindingNotFound       = reason{Status: http.StatusBadRequest, Code: "response_binding_not_found", Message: "Previous response ownership could not be located."}
 	reasonModelRequiredByFilter         = reason{Status: http.StatusBadRequest, Code: "model_required_by_filter", Message: "A model is required by the access key filter."}
 	reasonNoCandidate                   = reason{Status: http.StatusServiceUnavailable, Code: "no_available_candidate", Message: "No available upstream candidate."}
+	reasonCredentialRateLimited         = reason{Status: http.StatusTooManyRequests, Code: "credential_rate_limited", Message: "Local credential rate limit reached."}
 	reasonUpstreamRateLimited           = reason{Status: http.StatusTooManyRequests, Code: "upstream_rate_limited", Message: "Upstream rate limit exceeded."}
 	reasonUpstreamConnect               = reason{Status: http.StatusBadGateway, Code: "upstream_connect_failed", Message: "Could not connect to an upstream service."}
 	reasonUpstreamTimeout               = reason{Status: http.StatusGatewayTimeout, Code: "upstream_timeout", Message: "Upstream request timed out."}

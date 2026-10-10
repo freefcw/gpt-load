@@ -162,6 +162,8 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 	iterator := scheduler.New(request.snapshot, handler.registry, query)
 	failure := reasonNoCandidate
 	var cooldownUntil time.Time
+	credentialSlotRejected := make(map[uint]struct{})
+	credentialSlotRetried := make(map[uint]struct{})
 	for sequence := 1; sequence <= retryAttemptLimit(request.snapshot.Settings.RetryCount); sequence++ {
 		if ctx.Err() != nil {
 			value := reason{Status: http.StatusGatewayTimeout, Code: "mistral_realtime_timeout", Message: "Realtime transcription timed out."}
@@ -187,9 +189,16 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
 		if !acquired {
 			releaseGroup()
-			value := reasonNoCandidate
-			return nil, "", nil, &value
+			credentialSlotRejected[selection.CredentialID] = struct{}{}
+			if _, retried := credentialSlotRetried[selection.CredentialID]; !retried {
+				credentialSlotRetried[selection.CredentialID] = struct{}{}
+				iterator.RetryCredential(selection.CredentialID)
+				continue
+			}
+			failure = reasonCredentialRateLimited
+			continue
 		}
+		delete(credentialSlotRejected, selection.CredentialID)
 		release := func() { releaseGroup(); releaseCredential() }
 		transferred := false
 		defer func() {
@@ -211,10 +220,23 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 			iterator.SkipGroup(selection.GroupID)
 		}
 		if !decision.ShouldRetry() {
+			if len(credentialSlotRejected) > 0 {
+				break
+			}
 			handler.setMistralRealtimeRetryAfter(c, failure, cooldownUntil)
 			return nil, "", nil, &failure
 		}
 		iterator.AdvancePriority(selection)
+	}
+	if len(credentialSlotRejected) > 0 {
+		failure = reasonCredentialRateLimited
+		if until, limited := iterator.CredentialLimitedUntil(); limited {
+			cooldownUntil = until
+		}
+	} else if failure == reasonNoCandidate {
+		if until, limited := iterator.CredentialLimitedUntil(); limited {
+			failure, cooldownUntil = reasonCredentialRateLimited, until
+		}
 	}
 	handler.setMistralRealtimeRetryAfter(c, failure, cooldownUntil)
 	return nil, "", nil, &failure

@@ -313,7 +313,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
 		if !acquired {
 			releaseGroup()
-			failed(reasonNoCandidate)
+			failed(reasonCredentialRateLimited)
 			return
 		}
 		groupTransferred := false

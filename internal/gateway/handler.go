@@ -81,7 +81,6 @@ type credentialMutationCoordinator interface {
 
 type runtimeCredentialRegistry interface {
 	scheduler.CredentialSource
-	ConfigurationRevision() uint64
 	CaptureActiveCredentialRefs(groupIDs []uint) []state.CredentialRef
 	CredentialRef(credentialID uint) (state.CredentialRef, bool)
 	ActiveEncryptedCredentialDataIfMatch(ref state.CredentialRef) (string, bool)

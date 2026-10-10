@@ -927,7 +927,6 @@ func mapCredentialConfigs(
 		target := targets[row.GroupID]
 		result = append(result, state.CredentialConfig{
 			ID: row.ID, GroupID: row.GroupID, WeightManual: cloneWeight(row.WeightManual),
-			RPMLimit: row.RPMLimit, ConcurrencyLimit: row.ConcurrencyLimit,
 			Status:  state.CredentialStatus(row.Status),
 			Version: credentialVersion(row.SecretVersion),
 			IdentityGeneration: CredentialIdentityGeneration(

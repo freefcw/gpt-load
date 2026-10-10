@@ -585,7 +585,6 @@ async function refreshGroup(id: number, settings: GroupBasics): Promise<void> {
                 ...group,
                 name: settings.name,
                 enabled: settings.enabled,
-                priority: settings.priority,
                 weight: settings.weight ?? 50,
                 priceMultiplier: settings.priceMultiplier,
               }
@@ -603,7 +602,8 @@ async function mutate(
 ): Promise<void> {
   if (pending.value.has(group.id)) return
   pending.value.set(group.id, kind)
-  inlineErrors.value.delete(`${group.id}:${kind}`)
+  inlineErrors.value.delete(group.id + ':weight')
+  inlineErrors.value.delete(group.id + ':priority')
   notice.value = undefined
   if (patch.enabled !== undefined) enabledOverrides.value.set(group.id, patch.enabled)
   try {
@@ -615,8 +615,10 @@ async function mutate(
   } catch {
     if (!controller.signal.aborted) {
       enabledOverrides.value.delete(group.id)
-      if (kind !== 'toggle')
-        inlineErrors.value.set(`${group.id}:${kind}`, t('groups.row.saveFailed'))
+      if (kind === 'weight')
+        inlineErrors.value.set(group.id + ':weight', t('groups.row.saveFailed'))
+      else if (kind === 'priority')
+        inlineErrors.value.set(group.id + ':priority', t('groups.row.priorityFailed'))
       else notice.value = { tone: 'danger', text: t('groups.operationFailed') }
     }
   } finally {
@@ -872,7 +874,7 @@ useMessageSource(() =>
           <span>{{ t('groups.row.usage24h') }}</span>
           <span class="modern-group-list-actions-head"
             ><span>{{ t('groups.row.enabled') }}</span
-            ><span>{{ t('groups.edit.priority') }}</span
+            ><span>{{ t('groups.row.priority') }}</span
             ><span>{{ t('groups.row.weight') }}</span></span
           >
         </div>
@@ -930,18 +932,18 @@ useMessageSource(() =>
           :usage="usageByID.get(group.id)"
           :usage-loading="usage.isFetching.value"
           :usage-incomplete="usage.data.value?.incomplete ?? false"
-          :priority-error="inlineErrors.get(`${group.id}:priority`)"
-          :weight-error="inlineErrors.get(`${group.id}:weight`)"
+          :priority-error="inlineErrors.get(group.id + ':priority')"
+          :weight-error="inlineErrors.get(group.id + ':weight')"
           @expand="toggleExpanded(group.id)"
           @toggle="mutate(group, { enabled: $event }, 'toggle')"
           @priority="mutate(group, { priority: $event }, 'priority')"
           @priority-editing="inlineEditing(group.id, 'priority', $event)"
           @priority-dirty="inlineDirty(group.id, 'priority', $event)"
-          @clear-priority-error="inlineErrors.delete(`${group.id}:priority`)"
+          @clear-priority-error="inlineErrors.delete(group.id + ':priority')"
           @weight="mutate(group, { weight_manual: $event }, 'weight')"
           @weight-editing="inlineEditing(group.id, 'weight', $event)"
           @weight-dirty="inlineDirty(group.id, 'weight', $event)"
-          @clear-weight-error="inlineErrors.delete(`${group.id}:weight`)"
+          @clear-weight-error="inlineErrors.delete(group.id + ':weight')"
         />
       </template>
       <template #footer>
@@ -979,11 +981,10 @@ useMessageSource(() =>
 
 <style scoped>
 .modern-groups-workspace {
-  --modern-group-list-width: calc(
-    1024px + var(--modern-inline-number-width) + var(--modern-space-4)
-  );
-  --modern-group-action-columns: 36px repeat(2, var(--modern-inline-number-width));
-  --modern-group-columns: minmax(260px, 2fr) minmax(168px, 1fr) 90px 114px 140px max-content;
+  --modern-group-list-width: 1024px;
+  --modern-group-action-columns: 36px var(--modern-inline-number-width)
+    var(--modern-inline-number-width);
+  --modern-group-columns: minmax(220px, 2fr) minmax(168px, 1fr) 90px 114px 140px 164px;
   display: flex;
   flex: 1;
   min-width: 0;
@@ -1064,6 +1065,9 @@ useMessageSource(() =>
   gap: var(--modern-space-2);
   text-align: left;
 }
+.modern-group-list-actions-head > span:nth-child(n + 2) {
+  justify-self: end;
+}
 @media (max-width: 1150px) {
   .modern-groups-search {
     flex-basis: 100%;
@@ -1071,8 +1075,7 @@ useMessageSource(() =>
 }
 @media (max-width: 760px) {
   .modern-groups-workspace {
-    --modern-inline-number-width: 80px;
-    --modern-group-action-columns: 44px repeat(2, var(--modern-inline-number-width));
+    --modern-group-action-columns: 44px 56px 56px;
   }
   .modern-groups-toolbar {
     gap: var(--modern-space-2);

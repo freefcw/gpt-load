@@ -230,6 +230,10 @@ const weightValid = computed(() => {
     value === null || (Number.isInteger(value) && value !== undefined && value >= 1 && value <= 100)
   )
 })
+// 分组限额 0 表示不限；空输入会变成 NaN，必须拦住，否则非法值不进补丁、保存按钮却亮着。
+function limitValid(value: number | undefined): boolean {
+  return value !== undefined && Number.isSafeInteger(value) && value >= 0
+}
 const timeoutValid = computed(() =>
   timeoutKeys.every((key) => {
     const value = draft.value?.overrides[key]
@@ -248,6 +252,8 @@ const valid = computed(
     Object.keys(paramErrors.value).length === 0 &&
     isValidGroupPriority(draft.value?.priority ?? '') &&
     weightValid.value &&
+    limitValid(draft.value?.credential_rpm_limit) &&
+    limitValid(draft.value?.credential_concurrency_limit) &&
     isValidPriceMultiplier(draft.value?.price_multiplier ?? '') &&
     timeoutValid.value &&
     policyCountsValid.value &&
@@ -735,6 +741,8 @@ onBeforeUnmount(() => {
             :models="modelsQuery.data.value?.items ?? []"
             :priority="draft.priority"
             :weight-manual="draft.weight_manual"
+            :credential-rpm-limit="draft.credential_rpm_limit"
+            :credential-concurrency-limit="draft.credential_concurrency_limit"
             :price-multiplier="draft.price_multiplier"
             :enabled="draft.enabled"
             :pending="mutationPending"
@@ -748,6 +756,8 @@ onBeforeUnmount(() => {
             @update:validation-protocol="draft.validation_protocol = $event"
             @update:priority="draft.priority = $event"
             @update:weight-manual="draft.weight_manual = $event"
+            @update:credential-rpm-limit="draft.credential_rpm_limit = $event"
+            @update:credential-concurrency-limit="draft.credential_concurrency_limit = $event"
             @update:price-multiplier="draft.price_multiplier = $event"
             @update:enabled="draft.enabled = $event"
           />
@@ -766,6 +776,8 @@ onBeforeUnmount(() => {
             :models="modelsQuery.data.value?.items ?? []"
             :priority="draft.priority"
             :weight-manual="draft.weight_manual"
+            :credential-rpm-limit="draft.credential_rpm_limit"
+            :credential-concurrency-limit="draft.credential_concurrency_limit"
             :price-multiplier="draft.price_multiplier"
             :enabled="draft.enabled"
             :pending="mutationPending"
@@ -778,6 +790,8 @@ onBeforeUnmount(() => {
             @update:validation-protocol="draft.validation_protocol = $event"
             @update:priority="draft.priority = $event"
             @update:weight-manual="draft.weight_manual = $event"
+            @update:credential-rpm-limit="draft.credential_rpm_limit = $event"
+            @update:credential-concurrency-limit="draft.credential_concurrency_limit = $event"
             @update:price-multiplier="draft.price_multiplier = $event"
             @update:enabled="draft.enabled = $event"
           />

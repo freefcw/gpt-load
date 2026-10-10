@@ -13,9 +13,10 @@ const (
 
 // Target is the exact Credential identity remembered as a soft preference.
 type Target struct {
-	GroupID            uint
-	CredentialID       uint
-	IdentityGeneration uint64
+	GroupID               uint
+	CredentialID          uint
+	IdentityGeneration    uint64
+	ConfigurationRevision uint64
 }
 
 func (target Target) Valid() bool {
@@ -26,7 +27,7 @@ func (target Target) Valid() bool {
 type Observation struct {
 	Target   Target
 	key      Key
-	revision cacheRevision
+	revision uint64
 	version  uint64
 	found    bool
 }
@@ -42,22 +43,6 @@ type cacheEntry struct {
 	expiresAt time.Time
 }
 
-type cacheRevision struct {
-	snapshot   uint64
-	credential uint64
-}
-
-func (revision cacheRevision) less(other cacheRevision) bool {
-	if revision.snapshot != other.snapshot {
-		return revision.snapshot < other.snapshot
-	}
-	return revision.credential < other.credential
-}
-
-func (revision cacheRevision) equal(other cacheRevision) bool {
-	return revision.snapshot == other.snapshot && revision.credential == other.credential
-}
-
 // Cache is a bounded, process-local soft-affinity cache.
 type Cache struct {
 	mu          sync.Mutex
@@ -66,7 +51,7 @@ type Cache struct {
 	capacity    int
 	ttl         time.Duration
 	now         func() time.Time
-	revision    cacheRevision
+	revision    uint64
 	nextVersion uint64
 }
 
@@ -87,24 +72,15 @@ func newCache(capacity int, ttl time.Duration, now func() time.Time) *Cache {
 // newer revision clears entries so changed TTL, capacity, and group policy
 // take effect atomically. Older requests cannot restore stale configuration.
 func (cache *Cache) Configure(revision uint64, capacity int, ttl time.Duration) bool {
-	return cache.ConfigureWithCredentialRevision(revision, 0, capacity, ttl)
-}
-
-// ConfigureWithCredentialRevision applies both runtime configuration and
-// credential configuration revisions. Account weight/status changes do not
-// publish a ConfigSnapshot, so they need an independent revision to invalidate
-// soft affinity mappings.
-func (cache *Cache) ConfigureWithCredentialRevision(snapshotRevision, credentialRevision uint64, capacity int, ttl time.Duration) bool {
-	if cache == nil || snapshotRevision == 0 || capacity <= 0 || ttl <= 0 || cache.now == nil {
+	if cache == nil || revision == 0 || capacity <= 0 || ttl <= 0 || cache.now == nil {
 		return false
 	}
-	revision := cacheRevision{snapshot: snapshotRevision, credential: credentialRevision}
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	if revision.less(cache.revision) {
+	if revision < cache.revision {
 		return false
 	}
-	if revision.equal(cache.revision) {
+	if revision == cache.revision {
 		return cache.capacity == capacity && cache.ttl == ttl
 	}
 	cache.revision = revision
@@ -145,7 +121,7 @@ func (cache *Cache) RecordSuccess(key Key, observed Observation, target Target) 
 
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	if cache.capacity <= 0 || cache.ttl <= 0 || !observed.revision.equal(cache.revision) {
+	if cache.capacity <= 0 || cache.ttl <= 0 || observed.revision != cache.revision {
 		return false
 	}
 	now := cache.now()

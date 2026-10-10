@@ -57,10 +57,10 @@ type GroupConfig struct {
 	Models                     []ModelConfig
 	Settings                   config.Settings
 	WeightManual               *int
-	CredentialRPMLimit         int64
-	CredentialConcurrencyLimit int64
 	Enabled                    bool
 	Proxy                      *outboundproxy.Config
+	CredentialRPMLimit         int64
+	CredentialConcurrencyLimit int64
 }
 
 // CredentialConfig contains only non-secret credential metadata required to
@@ -70,11 +70,11 @@ type CredentialConfig struct {
 	GroupID            uint
 	Status             CredentialStatus
 	WeightManual       *int
-	RPMLimit           int64
-	ConcurrencyLimit   int64
 	Version            uint64
 	IdentityGeneration uint64
 	Fingerprint        string
+	RPMLimit           int64
+	ConcurrencyLimit   int64
 }
 
 type ModelConfig struct {
@@ -171,8 +171,6 @@ type GroupView struct {
 	Name                       string
 	ChannelID                  channel.ID
 	ConnectionType             string
-	CredentialRPMLimit         int64
-	CredentialConcurrencyLimit int64
 	Params                     json.RawMessage
 	ResolvedTarget             channel.ResolvedTarget
 	ValidationProtocol         protocol.Protocol
@@ -189,6 +187,8 @@ type GroupView struct {
 	WeightManual               *int
 	Proxy                      outboundproxy.Effective
 	ParameterOverrides         parameteroverride.Rules
+	CredentialRPMLimit         int64
+	CredentialConcurrencyLimit int64
 }
 
 type GroupCatalogView struct {
@@ -382,12 +382,12 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 			ResponsesWebsocketEnabled:  resolved.ResponsesWebsocketEnabled,
 			EmptyResponseRetry:         resolved.EmptyResponseRetry,
 			ConcurrencyLimit:           resolved.ConcurrencyLimit,
-			CredentialRPMLimit:         group.CredentialRPMLimit,
-			CredentialConcurrencyLimit: group.CredentialConcurrencyLimit,
 			WeightManual:               cloneWeight(group.WeightManual),
 			ConnectionType:             connection.Normalize(group.ConnectionType),
 			Proxy:                      groupProxy,
 			ParameterOverrides:         resolved.ParameterOverrides,
+			CredentialRPMLimit:         group.CredentialRPMLimit,
+			CredentialConcurrencyLimit: group.CredentialConcurrencyLimit,
 		}
 		params, err := input.ChannelRegistry.ValidateParams(group.ChannelID, group.Params)
 		if err != nil {

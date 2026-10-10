@@ -808,9 +808,14 @@ func TestValidationWorkerFailureGenerationChangesDuringProbeRejectsRecovery(t *t
 	close(releaseProbe)
 	awaitValidationDone(t, done)
 
-	if got, want := registry.BlacklistedCredentials(), []state.CredentialRef{{
+	got := registry.BlacklistedCredentials()
+	if len(got) != 1 || got[0].ConfigurationRevision == 0 {
+		t.Fatalf("blacklisted key revision = %#v, want non-zero", got)
+	}
+	if want := []state.CredentialRef{{
 		ID: 7, GroupID: 1, Version: 1, IdentityGeneration: 7,
 		Fingerprint: "test-7", EncryptedValue: "key-7", FailureGeneration: 1,
+		ConfigurationRevision: got[0].ConfigurationRevision,
 	}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("blacklisted keys = %#v, want stale recovery rejected as %#v", got, want)
 	}
@@ -1280,9 +1285,14 @@ func TestValidationWorkerDoesNotRecoverDisabledOrReplacedKeyRef(t *testing.T) {
 					t.Fatalf("SetCredentialStatus() error = %v", err)
 				}
 			}
-			if got, want := registry.BlacklistedCredentials(), []state.CredentialRef{{
+			got := registry.BlacklistedCredentials()
+			if len(got) != 1 || got[0].ConfigurationRevision == 0 {
+				t.Fatalf("blacklisted key revision = %#v, want non-zero", got)
+			}
+			if want := []state.CredentialRef{{
 				ID: 7, GroupID: 1, Version: 1, IdentityGeneration: 7,
 				Fingerprint: "test-7", EncryptedValue: test.expectedCipher, FailureGeneration: 0,
+				ConfigurationRevision: got[0].ConfigurationRevision,
 			}}; !reflect.DeepEqual(got, want) {
 				t.Fatalf("blacklisted keys after stale recovery = %#v, want %#v", got, want)
 			}

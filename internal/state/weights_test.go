@@ -234,9 +234,14 @@ func TestKeyRegistryRecoverIfMatchRestoresMatchingBlacklistedActiveKey(t *testin
 	if ok := registry.RecoverIfMatch(CredentialRef{ID: 1, GroupID: 10, Version: 1, IdentityGeneration: 1, Fingerprint: "test-fingerprint", EncryptedValue: "cipher-one"}); !ok {
 		t.Fatal("RecoverIfMatch() = false, want true")
 	}
-	if got, want := registryEntry(t, registry, 1), (CredentialEntry{
+	got := registryEntry(t, registry, 1)
+	if got.configurationRevision == 0 {
+		t.Fatalf("entry after RecoverIfMatch() has zero configuration revision: %#v", got)
+	}
+	if want := (CredentialEntry{
 		ID: 1, GroupID: 10, Status: CredentialStatusActive,
 		FailureGeneration: 1, Version: 1, IdentityGeneration: 1, Fingerprint: "test-fingerprint", EncryptedValue: "cipher-one",
+		configurationRevision: got.configurationRevision,
 	}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("entry after RecoverIfMatch() = %#v, want %#v", got, want)
 	}
@@ -304,9 +309,14 @@ func TestKeyRegistryRecoverIfMatchRejectsStaleGeneration(t *testing.T) {
 	if ok := registry.RecoverIfMatch(fresh); !ok {
 		t.Fatal("RecoverIfMatch(fresh ref) = false, want true")
 	}
-	if got, want := registryEntry(t, registry, 1), (CredentialEntry{
+	got := registryEntry(t, registry, 1)
+	if got.configurationRevision == 0 {
+		t.Fatalf("entry after fresh RecoverIfMatch() has zero configuration revision: %#v", got)
+	}
+	if want := (CredentialEntry{
 		ID: 1, GroupID: 10, Status: CredentialStatusActive,
 		FailureGeneration: 2, Version: 1, IdentityGeneration: 1, Fingerprint: "test-fingerprint", EncryptedValue: "cipher-one",
+		configurationRevision: got.configurationRevision,
 	}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("entry after fresh RecoverIfMatch() = %#v, want %#v", got, want)
 	}
@@ -371,7 +381,16 @@ func TestKeyRegistryBlacklistedKeysReturnsActiveSortedRefs(t *testing.T) {
 		{ID: 2, GroupID: 10, Version: 1, IdentityGeneration: 1, Fingerprint: "test-fingerprint", EncryptedValue: "cipher-two"},
 		{ID: 3, GroupID: 20, Version: 1, IdentityGeneration: 1, Fingerprint: "test-fingerprint", EncryptedValue: "cipher-three"},
 	}
-	if got := registry.BlacklistedCredentials(); !reflect.DeepEqual(got, want) {
+	got := registry.BlacklistedCredentials()
+	for _, ref := range got {
+		if ref.ConfigurationRevision == 0 {
+			t.Fatalf("BlacklistedCredentials() returned zero revision: %#v", got)
+		}
+	}
+	for index := range got {
+		want[index].ConfigurationRevision = got[index].ConfigurationRevision
+	}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("BlacklistedCredentials() = %#v, want %#v", got, want)
 	}
 }

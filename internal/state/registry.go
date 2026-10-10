@@ -55,6 +55,7 @@ type CredentialEntry struct {
 	lastQuotaRejectedAt     time.Time
 	RPMLimit                int64
 	ConcurrencyLimit        int64
+	configurationRevision   uint64
 }
 
 type CredentialMeta struct {
@@ -81,6 +82,7 @@ type CredentialRef struct {
 	FailureGeneration       uint64
 	ModelCooldownGeneration uint64
 	QuotaCooldownGeneration uint64
+	ConfigurationRevision   uint64
 }
 
 type CredentialRegistry struct {
@@ -88,9 +90,8 @@ type CredentialRegistry struct {
 	mu               sync.RWMutex
 	buckets          map[uint]map[uint]*CredentialEntry
 	credentialGroups map[uint]uint
-	// configurationRevision changes when credential configuration that can
-	// affect soft routing affinity changes. Runtime health transitions do not
-	// advance it.
+	// configurationRevision 只作单调递增的发号器；每个凭据的修订号记录在
+	// entry.configurationRevision 上，仅在影响分流的配置变化时分配新值。
 	configurationRevision uint64
 }
 
@@ -102,23 +103,22 @@ func NewCredentialRegistry() *CredentialRegistry {
 	}
 }
 
-// ConfigurationRevision identifies credential configuration visible to the
-// router. It is intentionally separate from ConfigSnapshot.Revision because
-// account weight/status mutations update the Registry without recompiling the
-// group snapshot.
-func (r *CredentialRegistry) ConfigurationRevision() uint64 {
-	if r == nil {
-		return 0
+// stampConfigurationRevisionLocked 只在影响分流的配置（状态、手动权重、凭据限额）变化或新建凭据时推进该凭据的修订号；
+// token 轮换、健康状态等不改变分流意图，沿用原修订号。
+func (r *CredentialRegistry) stampConfigurationRevisionLocked(entry, previous *CredentialEntry) {
+	if previous != nil && previous.Status == entry.Status &&
+		(previous.WeightManual == nil && entry.WeightManual == nil ||
+			previous.WeightManual != nil && entry.WeightManual != nil &&
+				*previous.WeightManual == *entry.WeightManual) &&
+		previous.RPMLimit == entry.RPMLimit &&
+		previous.ConcurrencyLimit == entry.ConcurrencyLimit {
+		entry.configurationRevision = previous.configurationRevision
+		return
 	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.configurationRevision
-}
-
-func (r *CredentialRegistry) bumpConfigurationRevisionLocked() {
 	if r.configurationRevision < ^uint64(0) {
 		r.configurationRevision++
 	}
+	entry.configurationRevision = r.configurationRevision
 }
 
 func ValidateCredentialEntries(entries []CredentialEntry) error {
@@ -181,7 +181,9 @@ func (r *CredentialRegistry) ReplaceCredentials(entries []CredentialEntry) error
 	r.mu.Lock()
 	for groupID, bucket := range buckets {
 		for id, entry := range bucket {
-			preserveModelCooldowns(entry, r.buckets[groupID][id])
+			previous := r.buckets[groupID][id]
+			preserveModelCooldowns(entry, previous)
+			r.stampConfigurationRevisionLocked(entry, previous)
 		}
 	}
 	r.buckets = buckets
@@ -191,7 +193,6 @@ func (r *CredentialRegistry) ReplaceCredentials(entries []CredentialEntry) error
 		views = append(views, runtimeView(&entry))
 	}
 	r.scheduling.SyncCredentials(0, views)
-	r.bumpConfigurationRevisionLocked()
 	r.mu.Unlock()
 	return nil
 }
@@ -220,13 +221,14 @@ func (r *CredentialRegistry) ApplyCredentialImport(groupID uint, entries []Crede
 		if r.buckets[groupID] == nil {
 			r.buckets[groupID] = make(map[uint]*CredentialEntry)
 		}
+		previous := r.buckets[groupID][entry.ID]
 		cloned := cloneCredentialEntry(entry)
-		preserveModelCooldowns(&cloned, r.buckets[groupID][entry.ID])
+		preserveModelCooldowns(&cloned, previous)
+		r.stampConfigurationRevisionLocked(&cloned, previous)
 		r.buckets[groupID][entry.ID] = &cloned
 		r.credentialGroups[entry.ID] = groupID
 		r.scheduling.SyncCredential(runtimeView(r.buckets[groupID][entry.ID]))
 	}
-	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -277,12 +279,13 @@ func (r *CredentialRegistry) RestoreGroupCredentialEntriesExact(groupID uint, en
 		r.buckets[groupID] = make(map[uint]*CredentialEntry)
 	}
 	for _, entry := range entries {
+		previous := r.buckets[groupID][entry.ID]
 		detached := detachCredentialEntryExact(entry)
+		r.stampConfigurationRevisionLocked(&detached, previous)
 		r.buckets[groupID][entry.ID] = &detached
 		r.credentialGroups[entry.ID] = groupID
 		r.scheduling.SyncCredential(runtimeView(r.buckets[groupID][entry.ID]))
 	}
-	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -350,6 +353,7 @@ func (r *CredentialRegistry) ReconcileGroup(groupID uint, entries []CredentialEn
 		}
 		cloned := cloneCredentialEntry(desired)
 		preserveModelCooldowns(&cloned, previous[desired.ID])
+		r.stampConfigurationRevisionLocked(&cloned, previous[desired.ID])
 		next[desired.ID] = &cloned
 	}
 	for credentialID := range previous {
@@ -364,7 +368,6 @@ func (r *CredentialRegistry) ReconcileGroup(groupID uint, entries []CredentialEn
 		}
 	}
 	r.syncSchedulingGroupLocked(groupID)
-	r.bumpConfigurationRevisionLocked()
 	return true, nil
 }
 
@@ -391,7 +394,9 @@ func samePersistedCredentialConfig(left, right CredentialEntry) bool {
 		left.Status != right.Status ||
 		left.EncryptedValue != right.EncryptedValue ||
 		left.EncryptedProxy != right.EncryptedProxy ||
-		left.ProxyFingerprint != right.ProxyFingerprint {
+		left.ProxyFingerprint != right.ProxyFingerprint ||
+		left.RPMLimit != right.RPMLimit ||
+		left.ConcurrencyLimit != right.ConcurrencyLimit {
 		return false
 	}
 	if left.WeightManual == nil || right.WeightManual == nil {
@@ -425,7 +430,6 @@ func (r *CredentialRegistry) RemoveCredential(credentialID uint) bool {
 	}
 	delete(r.credentialGroups, credentialID)
 	r.scheduling.Remove(credentialID)
-	r.bumpConfigurationRevisionLocked()
 	return true
 }
 
@@ -443,10 +447,12 @@ func (r *CredentialRegistry) UpdateGroupCredentialStatuses(
 		return err
 	}
 	for _, credentialID := range credentialIDs {
-		r.buckets[groupID][credentialID].Status = status
+		entry := r.buckets[groupID][credentialID]
+		prev := *entry
+		entry.Status = status
+		r.stampConfigurationRevisionLocked(entry, &prev)
 		r.scheduling.SyncCredential(runtimeView(r.buckets[groupID][credentialID]))
 	}
-	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -464,7 +470,6 @@ func (r *CredentialRegistry) RemoveGroupCredentials(groupID uint, credentialIDs 
 	if len(r.buckets[groupID]) == 0 {
 		delete(r.buckets, groupID)
 	}
-	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -513,7 +518,6 @@ func (r *CredentialRegistry) RemoveGroup(groupID uint) bool {
 		r.scheduling.Remove(credentialID)
 	}
 	delete(r.buckets, groupID)
-	r.bumpConfigurationRevisionLocked()
 	return true
 }
 
@@ -527,9 +531,11 @@ func (r *CredentialRegistry) SetCredentialStatus(credentialID uint, status Crede
 	if !ok {
 		return fmt.Errorf("credential %d not found", credentialID)
 	}
-	r.buckets[groupID][credentialID].Status = status
-	r.scheduling.SyncCredential(runtimeView(r.buckets[groupID][credentialID]))
-	r.bumpConfigurationRevisionLocked()
+	entry := r.buckets[groupID][credentialID]
+	prev := *entry
+	entry.Status = status
+	r.stampConfigurationRevisionLocked(entry, &prev)
+	r.scheduling.SyncCredential(runtimeView(entry))
 	return nil
 }
 
@@ -551,10 +557,11 @@ func (r *CredentialRegistry) UpdateCredentialConfig(
 	if !ok {
 		return fmt.Errorf("credential %d not found", credentialID)
 	}
+	prev := *entry
 	entry.Status = status
 	entry.WeightManual = clonedWeight
+	r.stampConfigurationRevisionLocked(entry, &prev)
 	r.scheduling.SyncCredential(runtimeView(entry))
-	r.bumpConfigurationRevisionLocked()
 	return nil
 }
 
@@ -662,6 +669,7 @@ func (r *CredentialRegistry) CaptureActiveCredentialRefs(groupIDs []uint) []Cred
 				FailureGeneration:       entry.FailureGeneration,
 				ModelCooldownGeneration: entry.ModelCooldownGeneration,
 				QuotaCooldownGeneration: entry.QuotaCooldownGeneration,
+				ConfigurationRevision:   entry.configurationRevision,
 			})
 		}
 	}
@@ -732,6 +740,7 @@ func (r *CredentialRegistry) CredentialRef(credentialID uint) (CredentialRef, bo
 		ProxyFingerprint: entry.ProxyFingerprint, FailureGeneration: entry.FailureGeneration,
 		ModelCooldownGeneration: entry.ModelCooldownGeneration,
 		QuotaCooldownGeneration: entry.QuotaCooldownGeneration,
+		ConfigurationRevision:   entry.configurationRevision,
 	}, true
 }
 
@@ -1083,6 +1092,7 @@ func (r *CredentialRegistry) BlacklistedCredentials() []CredentialRef {
 				FailureGeneration:       entry.FailureGeneration,
 				ModelCooldownGeneration: entry.ModelCooldownGeneration,
 				QuotaCooldownGeneration: entry.QuotaCooldownGeneration,
+				ConfigurationRevision:   entry.configurationRevision,
 			})
 		}
 	}

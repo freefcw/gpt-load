@@ -41,7 +41,7 @@ func (handler *Handler) resolveRequestAffinity(
 	if sessionID != "" {
 		key = affinity.DeriveSessionID(handler.encryption, accessKeyID, clientProtocol, sessionID)
 		result.kind = telemetry.AffinitySessionID
-	} else if allowPromptDerivedAccountAffinity(snapshot, allowedCredentialRefs) {
+	} else if hasNonCodexCandidate(snapshot, allowedCredentialRefs) {
 		if promptCacheKey != "" {
 			// prompt_cache_key is a cache hint. Codex-only candidate pools must not
 			// turn one shared cache key into a permanent account owner.
@@ -52,9 +52,8 @@ func (handler *Handler) resolveRequestAffinity(
 		}
 	}
 	if handler.affinityCache == nil ||
-		!handler.affinityCache.ConfigureWithCredentialRevision(
+		!handler.affinityCache.Configure(
 			snapshot.Revision,
-			handler.registry.ConfigurationRevision(),
 			snapshot.Settings.AffinityCapacity,
 			snapshot.Settings.AffinityTTL,
 		) {
@@ -75,29 +74,34 @@ func (handler *Handler) resolveRequestAffinity(
 	if !exists || !group.AffinityEnabled {
 		return resolved
 	}
+	if result.kind != telemetry.AffinitySessionID && group.ChannelID == channel.Codex {
+		// 提示词派生的 key 不绑定到 Codex 账号；显式 Session-Id 仍按账号归属。
+		return resolved
+	}
 	ref, allowed := allowedCredentialRefs[target.CredentialID]
 	if !allowed || ref.GroupID != target.GroupID ||
-		ref.IdentityGeneration != target.IdentityGeneration {
+		ref.IdentityGeneration != target.IdentityGeneration ||
+		ref.ConfigurationRevision != target.ConfigurationRevision {
 		return resolved
 	}
 	resolved.preferredCredentialID = target.CredentialID
 	return resolved
 }
 
-func allowPromptDerivedAccountAffinity(
+func hasNonCodexCandidate(
 	snapshot *state.ConfigSnapshot,
 	allowedCredentialRefs map[uint]state.CredentialRef,
 ) bool {
-	if snapshot == nil || len(allowedCredentialRefs) == 0 {
+	if snapshot == nil {
 		return false
 	}
 	for _, ref := range allowedCredentialRefs {
 		group, exists := snapshot.Groups[ref.GroupID]
-		if !exists || group.ChannelID == channel.Codex {
-			return false
+		if exists && group.ChannelID != channel.Codex {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func (handler *Handler) recordAffinitySuccess(
@@ -109,12 +113,16 @@ func (handler *Handler) recordAffinitySuccess(
 		!selection.Group.AffinityEnabled {
 		return
 	}
+	if request.kind != telemetry.AffinitySessionID && selection.Group.ChannelID == channel.Codex {
+		return
+	}
 	handler.affinityCache.RecordSuccess(
 		request.key,
 		request.observation,
 		affinity.Target{
 			GroupID: selection.GroupID, CredentialID: selection.CredentialID,
-			IdentityGeneration: ref.IdentityGeneration,
+			IdentityGeneration:    ref.IdentityGeneration,
+			ConfigurationRevision: ref.ConfigurationRevision,
 		},
 	)
 }

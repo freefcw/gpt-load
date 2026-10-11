@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,6 +18,35 @@ import (
 	"gpt-load/internal/ratelimit"
 	"gpt-load/internal/state"
 )
+
+type credentialSlotRaceLimiter struct {
+	mu       sync.Mutex
+	rejected map[uint]struct{}
+	retryAt  time.Time
+	attempts []uint
+}
+
+func (limiter *credentialSlotRaceLimiter) Available(uint, int64, int64) bool { return true }
+
+func (limiter *credentialSlotRaceLimiter) RetryAfter(credentialID uint, _ int64) time.Time {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	if _, rejected := limiter.rejected[credentialID]; rejected {
+		return limiter.retryAt
+	}
+	return time.Time{}
+}
+
+func (limiter *credentialSlotRaceLimiter) Acquire(credentialID uint, _, _ int64) (func(), bool) {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	limiter.attempts = append(limiter.attempts, credentialID)
+	if credentialID == 1 {
+		limiter.rejected[credentialID] = struct{}{}
+		return nil, false
+	}
+	return func() {}, true
+}
 
 // NewHandler 默认接入凭据本地限额：单凭据 RPM=1 时第二次请求返回 429。
 func TestHandlerLocalCredentialRPMRejectsWith429(t *testing.T) {
@@ -253,6 +284,35 @@ func TestWebsocketTurnReturnsCredentialRateLimited(t *testing.T) {
 	}
 	if event.Status != http.StatusTooManyRequests || event.Error.Code != reasonCredentialRateLimited.Code {
 		t.Fatalf("event = %+v, want 429 %s", event, reasonCredentialRateLimited.Code)
+	}
+}
+
+func TestWebsocketTurnSwitchesCredentialAfterSlotRace(t *testing.T) {
+	upstream := websocketSettingsUpstream(t, false)
+	handler, engine, _ := websocketTestHandler(t, upstream.URL, channel.OpenAI)
+	registry := handler.registry.(*state.CredentialRegistry)
+	second := testCredentialEntry(t, handler.encryption, 2, 1, "upstream-key-2")
+	if err := registry.ApplyCredentialImport(1, []state.CredentialEntry{second}); err != nil {
+		t.Fatal(err)
+	}
+	limiter := &credentialSlotRaceLimiter{rejected: make(map[uint]struct{}), retryAt: time.Now().Add(time.Minute)}
+	handler.credentialLimiter = limiter
+	server := httptest.NewServer(engine)
+	defer server.Close()
+	conn := dialGatewayWebsocket(t, server.URL)
+	defer conn.Close()
+	if err := conn.WriteJSON(map[string]any{"type": "response.create", "model": "public", "input": "test"}); err != nil {
+		t.Fatal(err)
+	}
+	var event struct {
+		Type  string
+		Error struct{ Code string }
+	}
+	if err := conn.ReadJSON(&event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != "response.completed" || event.Error.Code != "" {
+		t.Fatalf("event = %+v, want successful response after switching credential", event)
 	}
 }
 

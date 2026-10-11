@@ -69,11 +69,18 @@ type weightedCredential struct {
 	weight int64
 }
 
+type credentialLimitObservation struct {
+	retryAfter time.Time
+}
+
 type candidatePool struct {
 	targetsByGroup map[uint][]candidateTarget
 	groupIDsByMode map[channel.RouteMode][]uint
 	priorityLimit  *int32
 	lowerPriority  bool
+	// Once this pool has produced a candidate, later exhaustion in the
+	// same pool must not replace the failure reason of that attempt.
+	credentialLimitSuppressed bool
 }
 
 type Iterator struct {
@@ -270,7 +277,7 @@ func (iterator *Iterator) weightedPoolForMode(
 	return weighted, total
 }
 
-func (iterator *Iterator) withWeightedPool(candidates *candidatePool, modes []channel.RouteMode, now time.Time, fn func([]weightedCredential)) {
+func (iterator *Iterator) withWeightedPool(candidates *candidatePool, modes []channel.RouteMode, now time.Time, fn func([]weightedCredential)) []credentialLimitObservation {
 	var groupIDs []uint
 	seenGroups := make(map[uint]struct{})
 	for _, mode := range modes {
@@ -282,6 +289,7 @@ func (iterator *Iterator) withWeightedPool(candidates *candidatePool, modes []ch
 		}
 	}
 	excluded := func(id uint) bool { _, tried := iterator.tried[id]; return tried }
+	limited := make([]credentialLimitObservation, 0)
 	consume := func(pool []state.CredentialMeta) {
 		weighted := make([]weightedCredential, 0, len(pool))
 		for _, credential := range pool {
@@ -304,8 +312,13 @@ func (iterator *Iterator) withWeightedPool(candidates *candidatePool, modes []ch
 					continue
 				}
 				weight := effectiveWeight(target.group.WeightManual, credential.WeightManual)
-				if weight > 0 && iterator.credentialAvailable(credential, target.group) {
-					weighted = append(weighted, weightedCredential{meta: credential, weight: weight})
+				if weight > 0 {
+					available, retryAfter := iterator.credentialAvailable(credential, target.group)
+					if available {
+						weighted = append(weighted, weightedCredential{meta: credential, weight: weight})
+					} else {
+						limited = append(limited, credentialLimitObservation{retryAfter: retryAfter})
+					}
 				}
 				break
 			}
@@ -319,18 +332,24 @@ func (iterator *Iterator) withWeightedPool(candidates *candidatePool, modes []ch
 	} else {
 		consume(iterator.credentials.CollectCredentialCandidates(groupIDs, excluded, now))
 	}
+	return limited
 }
 
 func (iterator *Iterator) Next() (Selection, error) {
 	if iterator == nil || iterator.credentials == nil || iterator.progress == nil || iterator.now == nil {
 		return Selection{}, ErrExhausted
 	}
+	// The limit result describes only this exhaustion, not anything observed
+	// earlier in the iterator's lifetime.
+	iterator.credentialLimited = false
+	iterator.credentialLimitedUntil = time.Time{}
+	limited := make([]credentialLimitObservation, 0)
 	for _, pool := range []*candidatePool{&iterator.regular, &iterator.storeDowngraded} {
 		var selected state.CredentialMeta
 		var target candidateTarget
 		var found bool
 		now := iterator.now()
-		iterator.withWeightedPool(pool, []channel.RouteMode{channel.RouteNative, channel.RouteConverted}, now, func(weighted []weightedCredential) {
+		poolLimited := iterator.withWeightedPool(pool, []channel.RouteMode{channel.RouteNative, channel.RouteConverted}, now, func(weighted []weightedCredential) {
 			weighted = iterator.priorityCandidates(pool, weighted)
 			for _, modes := range iterator.routeModeTiers {
 				eligible := make([]weightedCredential, 0, len(weighted))
@@ -351,6 +370,9 @@ func (iterator *Iterator) Next() (Selection, error) {
 			}
 		})
 		if !found {
+			if !pool.credentialLimitSuppressed {
+				limited = append(limited, poolLimited...)
+			}
 			continue
 		}
 		iterator.tried[selected.ID] = struct{}{}
@@ -358,8 +380,13 @@ func (iterator *Iterator) Next() (Selection, error) {
 			priority := target.group.Priority
 			pool.priorityLimit, pool.lowerPriority = &priority, false
 		}
+		// A selection suppresses only this pool's later limit observations.
+		// Another pool, such as the Responses stateless fallback pool, must
+		// still be able to report its own exhausted local limit.
+		pool.credentialLimitSuppressed = true
 		return newSelection(selected, target), nil
 	}
+	iterator.noteCredentialLimits(limited)
 	return Selection{}, ErrExhausted
 }
 
@@ -509,23 +536,33 @@ func newSelection(credential state.CredentialMeta, target candidateTarget) Selec
 	}
 }
 
-// credentialAvailable 按“凭据自身值优先、否则继承分组默认值”解析限额，
-// 满额凭据不进候选池，调度器自然换号；同时记录最早的 RPM 恢复时刻。
-func (iterator *Iterator) credentialAvailable(credential state.CredentialMeta, group state.GroupView) bool {
+// credentialAvailable 按“凭据自身值优先、否则继承分组默认值”解析限额。
+// 这里只做无副作用探测；只有本次 Next 确实耗尽候选时才记录限额原因。
+func (iterator *Iterator) credentialAvailable(credential state.CredentialMeta, group state.GroupView) (bool, time.Time) {
 	if iterator.limiter == nil {
-		return true
+		return true, time.Time{}
 	}
 	rpm := state.EffectiveCredentialLimit(group.CredentialRPMLimit, credential.RPMLimit)
 	concurrency := state.EffectiveCredentialLimit(group.CredentialConcurrencyLimit, credential.ConcurrencyLimit)
+	if probe, ok := iterator.limiter.(interface {
+		AvailableWithRetryAfter(uint, int64, int64) (bool, time.Time)
+	}); ok {
+		return probe.AvailableWithRetryAfter(credential.ID, rpm, concurrency)
+	}
 	if iterator.limiter.Available(credential.ID, rpm, concurrency) {
-		return true
+		return true, time.Time{}
 	}
-	iterator.credentialLimited = true
-	if until := iterator.limiter.RetryAfter(credential.ID, rpm); !until.IsZero() &&
-		(iterator.credentialLimitedUntil.IsZero() || until.Before(iterator.credentialLimitedUntil)) {
-		iterator.credentialLimitedUntil = until
+	return false, iterator.limiter.RetryAfter(credential.ID, rpm)
+}
+
+func (iterator *Iterator) noteCredentialLimits(limited []credentialLimitObservation) {
+	for _, candidate := range limited {
+		iterator.credentialLimited = true
+		if !candidate.retryAfter.IsZero() &&
+			(iterator.credentialLimitedUntil.IsZero() || candidate.retryAfter.Before(iterator.credentialLimitedUntil)) {
+			iterator.credentialLimitedUntil = candidate.retryAfter
+		}
 	}
-	return false
 }
 
 // CredentialLimitedUntil 报告是否有候选因凭据本地限额被排除，以及最早的 RPM 恢复时刻；只有并发满额时恢复时刻未知，返回零值。

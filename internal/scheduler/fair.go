@@ -37,7 +37,7 @@ func (iterator *Iterator) ChargeReplay(selection Selection, ref state.Credential
 	return charged
 }
 
-// selectCredential 只操作内存；真实 Registry 调用方同时持有凭据读锁。
+// selectCredential 只操作 detached 的内存候选。
 func (iterator *Iterator) selectCredential(candidates []weightedCredential, preferred uint) (state.CredentialMeta, bool) {
 	var selected state.CredentialMeta
 	var found bool

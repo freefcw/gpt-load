@@ -106,12 +106,7 @@ func NewCredentialRegistry() *CredentialRegistry {
 // stampConfigurationRevisionLocked 只在影响分流的配置（状态、手动权重、凭据限额）变化或新建凭据时推进该凭据的修订号；
 // token 轮换、健康状态等不改变分流意图，沿用原修订号。
 func (r *CredentialRegistry) stampConfigurationRevisionLocked(entry, previous *CredentialEntry) {
-	if previous != nil && previous.Status == entry.Status &&
-		(previous.WeightManual == nil && entry.WeightManual == nil ||
-			previous.WeightManual != nil && entry.WeightManual != nil &&
-				*previous.WeightManual == *entry.WeightManual) &&
-		previous.RPMLimit == entry.RPMLimit &&
-		previous.ConcurrencyLimit == entry.ConcurrencyLimit {
+	if previous != nil && sameCredentialRoutingConfig(*previous, *entry) {
 		entry.configurationRevision = previous.configurationRevision
 		return
 	}
@@ -391,12 +386,17 @@ func samePersistedCredentialConfig(left, right CredentialEntry) bool {
 		left.Version != right.Version ||
 		left.IdentityGeneration != right.IdentityGeneration ||
 		left.Fingerprint != right.Fingerprint ||
-		left.Status != right.Status ||
 		left.EncryptedValue != right.EncryptedValue ||
 		left.EncryptedProxy != right.EncryptedProxy ||
 		left.ProxyFingerprint != right.ProxyFingerprint ||
-		left.RPMLimit != right.RPMLimit ||
-		left.ConcurrencyLimit != right.ConcurrencyLimit {
+		!sameCredentialRoutingConfig(left, right) {
+		return false
+	}
+	return true
+}
+
+func sameCredentialRoutingConfig(left, right CredentialEntry) bool {
+	if left.Status != right.Status || left.RPMLimit != right.RPMLimit || left.ConcurrencyLimit != right.ConcurrencyLimit {
 		return false
 	}
 	if left.WeightManual == nil || right.WeightManual == nil {

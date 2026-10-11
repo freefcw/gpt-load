@@ -224,3 +224,29 @@ func TestCodexLivePreparationFailureFallsBackToAnotherAccount(t *testing.T) {
 		t.Fatalf("preparation log = %+v", event.Attempts[0])
 	}
 }
+
+func TestCodexLiveSwitchesCredentialAfterSlotRace(t *testing.T) {
+	fake := &liveFakeOpener{}
+	handler, engine, _, _, _ := liveGatewayFixture(t, fake)
+	setLiveGroupMode(handler, 1, state.CodexLiveDirect)
+	setLiveGroupMode(handler, 2, state.CodexLiveDirect)
+	group := handler.manager.Current().Groups[1]
+	group.Priority = 100
+	handler.manager.Current().Groups[1] = group
+	limiter := &credentialSlotRaceLimiter{
+		rejected: make(map[uint]struct{}),
+		retryAt:  time.Now().Add(time.Minute),
+	}
+	handler.credentialLimiter = limiter
+	server := httptest.NewServer(engine)
+	defer server.Close()
+	_, offer := liveClientOffer(t)
+	response := liveRequest(t, server.Client(), http.MethodPost, server.URL+"/v1/live", "gl-client", "application/sdp", []byte(offer))
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("status=%d, want 201", response.StatusCode)
+	}
+	if len(limiter.attempts) != 3 || limiter.attempts[0] != 1 || limiter.attempts[1] != 1 || limiter.attempts[2] != 2 {
+		t.Fatalf("slot attempts=%v, want credential 1 retried once then credential 2; forwarded=%v", limiter.attempts, fake.attempted)
+	}
+	handler.CloseCodexLive()
+}

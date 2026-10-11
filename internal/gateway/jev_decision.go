@@ -58,9 +58,14 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 	}
 	query.AllowedCredentialIDs = allowedIDs
 	query.AllowedCredentialRefs = allowedRefs
-	selection, err := scheduler.New(snapshot, handler.registry, query).Next()
+	iterator := scheduler.New(snapshot, handler.registry, query)
+	selection, err := iterator.Next()
 	if err != nil {
-		decision.Reason = "no_candidate"
+		if _, limited := iterator.CredentialLimitedUntil(); limited {
+			decision.Reason = reasonCredentialRateLimited.Code
+		} else {
+			decision.Reason = "no_candidate"
+		}
 		return decision, result
 	}
 	ref, ok := allowedRefs[selection.CredentialID]

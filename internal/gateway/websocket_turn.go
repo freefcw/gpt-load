@@ -340,6 +340,9 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 	var finishRejectedAttempt func()
 	var finishFailedAttempt func()
 	var parameterOverrideFailure *reason
+	credentialSlotRejected := make(map[uint]struct{})
+	credentialSlotRetried := make(map[uint]struct{})
+	var credentialSlotRetryAt time.Time
 	recordPreparationFailure := func(selection scheduler.Selection, ref state.CredentialRef, code, summary string, scope execution.ErrorScope) bool {
 		started := recorder.beforeForward()
 		result := UpstreamResult{DispatchState: execution.DispatchNotSent,
@@ -417,7 +420,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 					s.emitReasonUntil(turn.lane, reasonUpstreamRateLimited, until)
 					return
 				}
-				if until, limited := iterator.CredentialLimitedUntil(); limited {
+				if until, limited := credentialLimitStatus(iterator, len(credentialSlotRejected) > 0, credentialSlotRetryAt); limited {
 					recorder.completeReason(reasonCredentialRateLimited)
 					s.emitReasonUntil(turn.lane, reasonCredentialRateLimited, until)
 					return
@@ -587,9 +590,16 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		releaseCredential, acquired := h.acquireCredentialSlot(selection)
 		if !acquired {
 			releaseGroup()
-			reject(reasonCredentialRateLimited)
-			return
+			credentialSlotRejected[selection.CredentialID] = struct{}{}
+			earliestRetryAfter(&credentialSlotRetryAt, credentialSlotRetryAfter(h.credentialLimiter, selection))
+			if _, retried := credentialSlotRetried[selection.CredentialID]; !retried {
+				credentialSlotRetried[selection.CredentialID] = struct{}{}
+				iterator.RetryCredential(selection.CredentialID)
+			}
+			releaseInput()
+			continue
 		}
+		delete(credentialSlotRejected, selection.CredentialID)
 		defer releaseCredential()
 		defer releaseGroup()
 		started := recorder.beforeForward()

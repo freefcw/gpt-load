@@ -74,7 +74,7 @@ func (handler *Handler) resolveRequestAffinity(
 	if !exists || !group.AffinityEnabled {
 		return resolved
 	}
-	if result.kind != telemetry.AffinitySessionID && group.ChannelID == channel.Codex {
+	if !affinityMayBindCodex(result.kind, group.ChannelID) {
 		// 提示词派生的 key 不绑定到 Codex 账号；显式 Session-Id 仍按账号归属。
 		return resolved
 	}
@@ -113,7 +113,7 @@ func (handler *Handler) recordAffinitySuccess(
 		!selection.Group.AffinityEnabled {
 		return
 	}
-	if request.kind != telemetry.AffinitySessionID && selection.Group.ChannelID == channel.Codex {
+	if !affinityMayBindCodex(request.kind, selection.Group.ChannelID) {
 		return
 	}
 	handler.affinityCache.RecordSuccess(
@@ -125,4 +125,8 @@ func (handler *Handler) recordAffinitySuccess(
 			ConfigurationRevision: ref.ConfigurationRevision,
 		},
 	)
+}
+
+func affinityMayBindCodex(kind string, channelID channel.ID) bool {
+	return kind == telemetry.AffinitySessionID || channelID != channel.Codex
 }

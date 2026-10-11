@@ -642,6 +642,10 @@ func validateCompileInput(input CompileInput) error {
 		if err := validateManualWeight(fmt.Sprintf("group %d", group.ID), group.WeightManual); err != nil {
 			return err
 		}
+		if group.CredentialRPMLimit < 0 || group.CredentialRPMLimit > MaxJSONSafeInteger ||
+			group.CredentialConcurrencyLimit < 0 || group.CredentialConcurrencyLimit > MaxJSONSafeInteger {
+			return fmt.Errorf("group %d has invalid credential limit", group.ID)
+		}
 		seenModels := make(map[[2]string]struct{}, len(group.Models))
 		for _, model := range group.Models {
 			if strings.TrimSpace(model.ID) == "" {
@@ -704,7 +708,7 @@ func validateCompileInput(input CompileInput) error {
 		if accessKey.PriceMultiplier != nil && !accessKey.PriceMultiplier.Valid() {
 			return fmt.Errorf("access key %d price multiplier is invalid", accessKey.ID)
 		}
-		if accessKey.ConcurrencyLimit != nil && (*accessKey.ConcurrencyLimit < 0 || *accessKey.ConcurrencyLimit > maxJSONSafeInteger) {
+		if accessKey.ConcurrencyLimit != nil && (*accessKey.ConcurrencyLimit < 0 || *accessKey.ConcurrencyLimit > MaxJSONSafeInteger) {
 			return fmt.Errorf("access key %d has invalid concurrency limit", accessKey.ID)
 		}
 		if accessKey.RPMLimit < 0 {

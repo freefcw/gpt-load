@@ -2,6 +2,7 @@ package control
 
 import (
 	app_errors "gpt-load/internal/platform/errors"
+	"gpt-load/internal/state"
 )
 
 // ConcurrencyView 由现有管理资源返回，当前值只读取运行时内存。
@@ -14,7 +15,7 @@ func normalizeConcurrencyLimit(field optionalField[int64]) (*int64, error) {
 	if !field.Set || field.Null {
 		return nil, nil
 	}
-	if field.Value < 0 || field.Value > 9007199254740991 {
+	if field.Value < 0 || field.Value > state.MaxJSONSafeInteger {
 		return nil, app_errors.ErrValidation
 	}
 	value := field.Value

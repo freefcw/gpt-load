@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import { formatInteger } from '@/lib/format'
+import { parseNonNegativeSafeInteger } from '@shared/non-negative-limit'
 
 const props = defineProps<{
   // 凭据自身值。0 表示继承分组，不是不限。
@@ -34,10 +35,7 @@ const display = computed(() =>
     : formatInteger(props.effectiveLimit, locale.value),
 )
 const parsed = computed(() => {
-  const trimmed = draft.value.trim()
-  if (trimmed === '') return 0
-  const value = Number(trimmed)
-  return Number.isSafeInteger(value) && value >= 0 ? value : Number.NaN
+  return parseNonNegativeSafeInteger(draft.value)
 })
 const valid = computed(() => !Number.isNaN(parsed.value))
 

@@ -231,6 +231,9 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 	failure := reasonNoCandidate
 	var refreshSelection *scheduler.Selection
 	refreshUsed := false
+	credentialSlotRejected := make(map[uint]struct{})
+	credentialSlotRetried := make(map[uint]struct{})
+	var credentialSlotRetryAt time.Time
 	for sequence := 1; sequence <= retryAttemptLimit(request.snapshot.Settings.RetryCount); sequence++ {
 		if setupContext.Err() != nil {
 			failed(reasonLiveUnavailable)
@@ -313,9 +316,15 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
 		if !acquired {
 			releaseGroup()
-			failed(reasonCredentialRateLimited)
-			return
+			credentialSlotRejected[selection.CredentialID] = struct{}{}
+			earliestRetryAfter(&credentialSlotRetryAt, credentialSlotRetryAfter(handler.credentialLimiter, selection))
+			if _, retried := credentialSlotRetried[selection.CredentialID]; !retried {
+				credentialSlotRetried[selection.CredentialID] = struct{}{}
+				iterator.RetryCredential(selection.CredentialID)
+			}
+			continue
 		}
+		delete(credentialSlotRejected, selection.CredentialID)
 		groupTransferred := false
 		defer func() {
 			if !groupTransferred {
@@ -461,6 +470,15 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 			_ = handler.liveSessions.finishCall(call, "client_disconnected")
 		}
 		return
+	}
+	if failure == reasonNoCandidate && len(credentialSlotRejected) > 0 {
+		failure = reasonCredentialRateLimited
+		setCooldownRetryAfter(c, credentialSlotRetryAt, handler.now())
+	} else if failure == reasonNoCandidate {
+		if retryAt, limited := credentialLimitStatus(iterator, false, time.Time{}); limited {
+			failure = reasonCredentialRateLimited
+			setCooldownRetryAfter(c, retryAt, handler.now())
+		}
 	}
 	failed(failure)
 }

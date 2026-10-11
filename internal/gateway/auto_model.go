@@ -214,8 +214,11 @@ func (handler *Handler) prepareAutoModel(ctx context.Context, snapshot *state.Co
 				result = handler.executeAutoDecision(ctx, snapshot, key, presets, view)
 			}
 			decision = &result
-			if result.Reason == reasonConcurrencyLimit.Code {
+			switch result.Reason {
+			case reasonConcurrencyLimit.Code:
 				return parsed, metadata, decision, &reasonConcurrencyLimit
+			case reasonCredentialRateLimited.Code:
+				return parsed, metadata, decision, &reasonCredentialRateLimited
 			}
 			if result.Status == "selected" {
 				for _, preset := range presets {

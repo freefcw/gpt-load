@@ -179,6 +179,109 @@ func TestIteratorReportsLowerPriorityRPMRecoveryWhenHigherPriorityIsFull(t *test
 	}
 }
 
+func TestIteratorDoesNotReportUnselectedHigherPriorityLimitAfterLowerPrioritySelection(t *testing.T) {
+	t.Parallel()
+
+	snapshot := channelSchedulerSnapshot(t)
+	high := snapshot.Groups[1]
+	high.Priority = 100
+	high.CredentialRPMLimit = 10
+	snapshot.Groups[1] = high
+	low := snapshot.Groups[2]
+	low.Priority = 0
+	snapshot.Groups[2] = low
+	retryAt := time.Now().Add(30 * time.Second)
+	iterator := New(snapshot, fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1},
+		{ID: 21, GroupID: 2},
+	}}, Query{
+		ClientProtocol: protocol.OpenAICompletions,
+		Operation:      execution.OperationChatCompletion,
+		ExternalModel:  modelPointer("public"),
+		Limiter: blockingLimiter{
+			blocked:    map[uint]struct{}{11: {}},
+			retryAfter: map[uint]time.Time{11: retryAt},
+		},
+	})
+
+	selection, err := iterator.Next()
+	if err != nil || selection.CredentialID != 21 {
+		t.Fatalf("Next() = %#v, %v; want lower-priority credential 21", selection, err)
+	}
+	if until, limited := iterator.CredentialLimitedUntil(); limited || !until.IsZero() {
+		t.Fatalf("CredentialLimitedUntil() = %v, %t; want zero, false after a real selection", until, limited)
+	}
+
+	iterator.SkipGroup(2)
+	if _, err := iterator.Next(); !errors.Is(err, ErrExhausted) {
+		t.Fatalf("second Next() error = %v, want ErrExhausted", err)
+	}
+	if _, limited := iterator.CredentialLimitedUntil(); limited {
+		t.Fatal("a failed lower-priority attempt left an unrelated higher-priority limit as the final reason")
+	}
+}
+
+func TestIteratorReportsStoreDowngradedPoolLimitAfterRegularPoolSelection(t *testing.T) {
+	t.Parallel()
+
+	snapshot := responsesStoreSchedulerSnapshot(t, true)
+	retryAt := time.Now().Add(30 * time.Second)
+	iterator := New(snapshot, fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1, RPMLimit: 10},
+		{ID: 21, GroupID: 2},
+		{ID: 31, GroupID: 3, RPMLimit: 10},
+		{ID: 41, GroupID: 4, RPMLimit: 10},
+	}}, Query{
+		ClientProtocol:           protocol.OpenAIResponses,
+		Operation:                execution.OperationResponsesCreate,
+		ResponsesStorePreference: execution.ResponsesStorePreferencePreferStored,
+		ExternalModel:            modelPointer("gpt"),
+		Limiter: blockingLimiter{
+			blocked:    map[uint]struct{}{11: {}, 31: {}, 41: {}},
+			retryAfter: map[uint]time.Time{11: retryAt, 31: retryAt.Add(10 * time.Second), 41: retryAt.Add(20 * time.Second)},
+		},
+	})
+
+	first, err := iterator.Next()
+	if err != nil || first.CredentialID != 21 || first.ResponsesStoreDowngraded {
+		t.Fatalf("first Next() = (%#v, %v), want exact regular credential 21", first, err)
+	}
+	if _, err := iterator.Next(); !errors.Is(err, ErrExhausted) {
+		t.Fatalf("second Next() error = %v, want ErrExhausted", err)
+	}
+	until, limited := iterator.CredentialLimitedUntil()
+	if !limited || !until.Equal(retryAt) {
+		t.Fatalf("CredentialLimitedUntil() = %v, %t; want %v, true from downgraded pool", until, limited, retryAt)
+	}
+}
+
+func TestIteratorClearsPreviousCredentialLimitAfterLaterSelection(t *testing.T) {
+	t.Parallel()
+
+	snapshot := channelSchedulerSnapshot(t)
+	limiter := blockingLimiter{blocked: map[uint]struct{}{21: {}}, retryAfter: map[uint]time.Time{21: time.Now().Add(time.Minute)}}
+	iterator := New(snapshot, fakeCredentialSource{keys: []state.CredentialMeta{{ID: 21, GroupID: 2, RPMLimit: 10}}}, Query{
+		ClientProtocol: protocol.OpenAICompletions,
+		Operation:      execution.OperationChatCompletion,
+		ExternalModel:  modelPointer("public"),
+		Limiter:        limiter,
+	})
+	if _, err := iterator.Next(); !errors.Is(err, ErrExhausted) {
+		t.Fatalf("first Next() error = %v, want ErrExhausted", err)
+	}
+	if _, limited := iterator.CredentialLimitedUntil(); !limited {
+		t.Fatal("first exhausted Next() did not report local limit")
+	}
+	delete(limiter.blocked, 21)
+	selection, err := iterator.Next()
+	if err != nil || selection.CredentialID != 21 {
+		t.Fatalf("second Next() = (%#v, %v), want credential 21", selection, err)
+	}
+	if until, limited := iterator.CredentialLimitedUntil(); limited || !until.IsZero() {
+		t.Fatalf("CredentialLimitedUntil() after selection = %v, %t; want zero, false", until, limited)
+	}
+}
+
 func TestIteratorReportsZeroRetryAfterWhenOnlyConcurrencyExhausted(t *testing.T) {
 	t.Parallel()
 

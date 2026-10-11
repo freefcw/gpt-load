@@ -30,6 +30,24 @@ import (
 
 type autoDecisionClient func(*http.Request) (*http.Response, error)
 
+type autoDecisionStub func(
+	context.Context,
+	*state.ConfigSnapshot,
+	state.AccessKeyView,
+	[]automodel.CompiledPreset,
+	automodel.TaskState,
+) automodel.Decision
+
+func (stub autoDecisionStub) Decide(
+	ctx context.Context,
+	snapshot *state.ConfigSnapshot,
+	key state.AccessKeyView,
+	presets []automodel.CompiledPreset,
+	view automodel.TaskState,
+) automodel.Decision {
+	return stub(ctx, snapshot, key, presets, view)
+}
+
 func (call autoDecisionClient) Decide(
 	ctx context.Context,
 	snapshot *state.ConfigSnapshot,
@@ -449,6 +467,39 @@ func TestAutoModelLocalDecisionFailureIsNotBilledAsAnUpstreamCall(t *testing.T) 
 		decision.CostState != "not_applicable" || decision.PricingCompleteness != "not_applicable" ||
 		decision.EstimatedCostNanoUSD != 0 {
 		t.Fatalf("decision = %#v", decision)
+	}
+}
+
+func TestAutoModelStopsWhenDecisionCredentialIsLocallyRateLimited(t *testing.T) {
+	handler, manager, _ := newHandlerForTest(t, &scriptedForwarder{}, "answer-key")
+	configureAutoModelTest(t, handler, manager, state.FilterSet{})
+	handler.decisionClient = autoDecisionStub(func(
+		context.Context,
+		*state.ConfigSnapshot,
+		state.AccessKeyView,
+		[]automodel.CompiledPreset,
+		automodel.TaskState,
+	) automodel.Decision {
+		return automodel.Decision{Reason: reasonCredentialRateLimited.Code}
+	})
+
+	snapshot := manager.Current()
+	selectedDialect := dialect.NewOpenAI()
+	request := &dialect.ParsedRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/chat/completions",
+		Body:   []byte("{\"model\":\"auto-probe\",\"messages\":[{\"role\":\"user\",\"content\":\"classify this\"}] }"),
+	}
+	metadata, err := selectedDialect.InspectRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, decision, failure := handler.prepareAutoModel(
+		context.Background(), snapshot, snapshot.AccessKeysByID[1], selectedDialect, request, metadata, nil,
+		func() *reason { return nil },
+	)
+	if failure != &reasonCredentialRateLimited || decision == nil || decision.Reason != reasonCredentialRateLimited.Code {
+		t.Fatalf("decision=%#v failure=%v, want local credential rate-limit failure", decision, failure)
 	}
 }
 

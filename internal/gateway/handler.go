@@ -980,6 +980,7 @@ func (handler *Handler) executeAttempts(
 	forwardAttempts := 0
 	credentialSlotRejected := make(map[uint]struct{})
 	credentialSlotRetried := make(map[uint]struct{})
+	var credentialSlotRetryAt time.Time
 	type credentialRefreshRetry struct {
 		selection scheduler.Selection
 		ref       state.CredentialRef
@@ -1438,6 +1439,7 @@ func (handler *Handler) executeAttempts(
 		if !acquired {
 			releaseGroup()
 			credentialSlotRejected[selection.CredentialID] = struct{}{}
+			earliestRetryAfter(&credentialSlotRetryAt, credentialSlotRetryAfter(handler.credentialLimiter, selection))
 			if _, retried := credentialSlotRetried[selection.CredentialID]; !retried {
 				credentialSlotRetried[selection.CredentialID] = struct{}{}
 				iterator.RetryCredential(selection.CredentialID)
@@ -1939,7 +1941,7 @@ func (handler *Handler) executeAttempts(
 		handler.completeReason(ginContext, recorder, reasonUpstreamRateLimited)
 		return
 	}
-	if until, limited := iterator.CredentialLimitedUntil(); limited || len(credentialSlotRejected) > 0 {
+	if until, limited := credentialLimitStatus(iterator, len(credentialSlotRejected) > 0, credentialSlotRetryAt); limited {
 		setCooldownRetryAfter(ginContext, until, handler.now())
 		handler.completeReason(ginContext, recorder, reasonCredentialRateLimited)
 		return

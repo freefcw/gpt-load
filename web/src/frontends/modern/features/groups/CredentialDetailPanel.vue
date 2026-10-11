@@ -27,6 +27,7 @@ import {
 import { useApiClient } from '@shared/http/client-context'
 import { credentialStatus, credentialTime } from './credential-presentation'
 import { validProxySelection } from '@shared/proxies/api'
+import { parseNonNegativeSafeInteger } from '@shared/non-negative-limit'
 import ProxySelect from '../proxies/ProxySelect.vue'
 import CredentialLimitFields from './CredentialLimitFields.vue'
 import GroupWorkspacePanel from './GroupWorkspacePanel.vue'
@@ -65,8 +66,8 @@ const dirty = computed(
     Boolean(saved.value) &&
     (nameDirty.value ||
       weight.value !== String(saved.value!.weightManual ?? '') ||
-      limitValue(rpmLimit.value) !== saved.value!.rpmLimit ||
-      limitValue(concurrencyLimit.value) !== saved.value!.concurrencyLimit ||
+      parseNonNegativeSafeInteger(rpmLimit.value) !== saved.value!.rpmLimit ||
+      parseNonNegativeSafeInteger(concurrencyLimit.value) !== saved.value!.concurrencyLimit ||
       proxyMode.value !== saved.value!.proxy.mode ||
       (Boolean(proxyID.value) && Number(proxyID.value) !== saved.value?.proxy.id)),
 )
@@ -84,11 +85,8 @@ watch(
   { immediate: true },
 )
 // 留空按 0 处理，0 表示继承分组默认限额。
-function limitValue(value: string): number {
-  return value.trim() === '' ? 0 : Number(value.trim())
-}
 function limitInvalid(value: string): boolean {
-  const parsed = limitValue(value)
+  const parsed = parseNonNegativeSafeInteger(value)
   return !Number.isSafeInteger(parsed) || parsed < 0
 }
 const rpmInvalid = computed(() => limitInvalid(rpmLimit.value))
@@ -150,10 +148,10 @@ async function save(): Promise<void> {
   const patch: Parameters<typeof updateCredential>[3] = {}
   if (weight.value !== String(saved.value.weightManual ?? ''))
     patch.weight_manual = weight.value ? Number(weight.value) : null
-  if (limitValue(rpmLimit.value) !== saved.value.rpmLimit)
-    patch.rpm_limit = limitValue(rpmLimit.value)
-  if (limitValue(concurrencyLimit.value) !== saved.value.concurrencyLimit)
-    patch.concurrency_limit = limitValue(concurrencyLimit.value)
+  if (parseNonNegativeSafeInteger(rpmLimit.value) !== saved.value.rpmLimit)
+    patch.rpm_limit = parseNonNegativeSafeInteger(rpmLimit.value)
+  if (parseNonNegativeSafeInteger(concurrencyLimit.value) !== saved.value.concurrencyLimit)
+    patch.concurrency_limit = parseNonNegativeSafeInteger(concurrencyLimit.value)
   if (proxyChanged.value)
     patch.proxy =
       proxyMode.value === 'inherit'

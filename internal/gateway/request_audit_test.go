@@ -20,6 +20,7 @@ import (
 	"gpt-load/internal/execution"
 	"gpt-load/internal/jev"
 	"gpt-load/internal/parameteroverride"
+	"gpt-load/internal/ratelimit"
 	"gpt-load/internal/requestaudit"
 	"gpt-load/internal/state"
 )
@@ -299,6 +300,32 @@ func TestRequestAuditUnavailableJevAllowsBusinessRequest(t *testing.T) {
 				t.Fatalf("JEV failure missing from successful request log: %+v", events)
 			}
 		})
+	}
+}
+
+func TestJevDecisionReportsCredentialRateLimit(t *testing.T) {
+	h, _ := auditEngine(t, &scriptedForwarder{})
+	limiter := ratelimit.NewCredentialLimiter()
+	h.credentialLimiter = limiter
+	registry := h.registry.(*state.CredentialRegistry)
+	entries, err := registry.SnapshotGroupCredentialEntriesExact(2, []uint{3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries[0].RPMLimit = 1
+	if err := registry.RestoreGroupCredentialEntriesExact(2, entries); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := limiter.Acquire(3, 1, 0); !ok {
+		t.Fatal("could not exhaust JEV credential RPM")
+	}
+
+	decision, _ := h.executeJevDecision(
+		t.Context(), h.manager.Current(), h.manager.Current().AccessKeysByID[1],
+		[]byte("{\"state\":{},\"questions\":{}}"), false,
+	)
+	if decision.Reason != reasonCredentialRateLimited.Code {
+		t.Fatalf("JEV decision reason=%q, want %q", decision.Reason, reasonCredentialRateLimited.Code)
 	}
 }
 

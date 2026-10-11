@@ -162,6 +162,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 	iterator := scheduler.New(request.snapshot, handler.registry, query)
 	failure := reasonNoCandidate
 	var cooldownUntil time.Time
+	var slotRetryAt time.Time
 	credentialSlotRejected := make(map[uint]struct{})
 	credentialSlotRetried := make(map[uint]struct{})
 	for sequence := 1; sequence <= retryAttemptLimit(request.snapshot.Settings.RetryCount); sequence++ {
@@ -190,6 +191,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 		if !acquired {
 			releaseGroup()
 			credentialSlotRejected[selection.CredentialID] = struct{}{}
+			earliestRetryAfter(&slotRetryAt, credentialSlotRetryAfter(handler.credentialLimiter, selection))
 			if _, retried := credentialSlotRetried[selection.CredentialID]; !retried {
 				credentialSlotRetried[selection.CredentialID] = struct{}{}
 				iterator.RetryCredential(selection.CredentialID)
@@ -230,11 +232,13 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 	}
 	if len(credentialSlotRejected) > 0 {
 		failure = reasonCredentialRateLimited
+		cooldownUntil = slotRetryAt
 		if until, limited := iterator.CredentialLimitedUntil(); limited {
-			cooldownUntil = until
+			earliestRetryAfter(&cooldownUntil, until)
 		}
-	} else if failure == reasonNoCandidate {
-		if until, limited := iterator.CredentialLimitedUntil(); limited {
+	}
+	if failure == reasonNoCandidate {
+		if until, limited := credentialLimitStatus(iterator, false, time.Time{}); limited {
 			failure, cooldownUntil = reasonCredentialRateLimited, until
 		}
 	}

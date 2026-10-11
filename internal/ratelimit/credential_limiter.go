@@ -13,7 +13,6 @@ type CredentialLimiter struct {
 	windows  map[uint]timestampDeque
 	inFlight map[uint]int64
 	now      func() time.Time
-	lastGC   time.Time
 }
 
 func NewCredentialLimiter() *CredentialLimiter {
@@ -32,19 +31,44 @@ func (limiter *CredentialLimiter) Available(credentialID uint, rpmLimit, concurr
 	return limiter.availableLocked(credentialID, rpmLimit, concurrencyLimit, limiter.now())
 }
 
-func (limiter *CredentialLimiter) availableLocked(credentialID uint, rpmLimit, concurrencyLimit int64, now time.Time) bool {
-	if concurrencyLimit > 0 && limiter.inFlight[credentialID] >= concurrencyLimit {
-		return false
+// AvailableWithRetryAfter checks a credential once and returns its RPM
+// recovery time from the same snapshot. The scheduler uses this to avoid
+// taking the limiter lock twice for an exhausted credential.
+func (limiter *CredentialLimiter) AvailableWithRetryAfter(credentialID uint, rpmLimit, concurrencyLimit int64) (bool, time.Time) {
+	if limiter == nil || (rpmLimit <= 0 && concurrencyLimit <= 0) {
+		return true, time.Time{}
 	}
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	now := limiter.now()
+	available, retryAfter := limiter.availableWithRetryAfterLocked(credentialID, rpmLimit, concurrencyLimit, now)
+	return available, retryAfter
+}
+
+func (limiter *CredentialLimiter) availableLocked(credentialID uint, rpmLimit, concurrencyLimit int64, now time.Time) bool {
+	available, _ := limiter.availableWithRetryAfterLocked(credentialID, rpmLimit, concurrencyLimit, now)
+	return available
+}
+
+func (limiter *CredentialLimiter) availableWithRetryAfterLocked(credentialID uint, rpmLimit, concurrencyLimit int64, now time.Time) (bool, time.Time) {
+	concurrencyBlocked := concurrencyLimit > 0 && limiter.inFlight[credentialID] >= concurrencyLimit
+	var retryAfter time.Time
 	if rpmLimit > 0 {
 		window := limiter.windows[credentialID]
 		window.dropThrough(now.Add(-time.Minute))
-		limiter.windows[credentialID] = window
+		if window.len() == 0 {
+			delete(limiter.windows, credentialID)
+		} else {
+			limiter.windows[credentialID] = window
+		}
 		if int64(window.len()) >= rpmLimit {
-			return false
+			retryAfter = window.at(window.len() - int(rpmLimit)).Add(time.Minute)
 		}
 	}
-	return true
+	if concurrencyBlocked || !retryAfter.IsZero() {
+		return false, retryAfter
+	}
+	return true, time.Time{}
 }
 
 // Acquire 在同一把锁内完成判定与扣减：RPM 窗口记一次，并发在途加一。
@@ -56,7 +80,6 @@ func (limiter *CredentialLimiter) Acquire(credentialID uint, rpmLimit, concurren
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()
 	now := limiter.now()
-	limiter.gcLocked(now)
 	if !limiter.availableLocked(credentialID, rpmLimit, concurrencyLimit, now) {
 		return nil, false
 	}
@@ -106,20 +129,4 @@ func (limiter *CredentialLimiter) InFlightForTest(credentialID uint) int64 {
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()
 	return limiter.inFlight[credentialID]
-}
-
-func (limiter *CredentialLimiter) gcLocked(now time.Time) {
-	if !limiter.lastGC.IsZero() && now.Sub(limiter.lastGC) < time.Minute {
-		return
-	}
-	cutoff := now.Add(-time.Minute)
-	for id, window := range limiter.windows {
-		window.dropThrough(cutoff)
-		if window.len() == 0 {
-			delete(limiter.windows, id)
-			continue
-		}
-		limiter.windows[id] = window
-	}
-	limiter.lastGC = now
 }

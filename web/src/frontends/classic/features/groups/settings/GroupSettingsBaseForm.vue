@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { isValidGroupPriority } from '@shared/group-priority'
+import { parseNonNegativeSafeInteger } from '@shared/non-negative-limit'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -67,13 +68,6 @@ const validationModelOptions = computed(() =>
     .sort((left, right) => left.id.localeCompare(right.id)),
 )
 // 分组限额 0 表示不限，输入框留空即是 0。
-function parseLimit(raw: string): number {
-  const trimmed = raw.trim()
-  if (trimmed === '') return 0
-  const value = Number(trimmed)
-  return Number.isSafeInteger(value) && value >= 0 ? value : Number.NaN
-}
-
 const weightValid = computed(
   () =>
     props.weightManual === null ||
@@ -301,7 +295,12 @@ function parameterPlaceholder(field: ChannelFieldDto): string | undefined {
             :placeholder="t('group.settings.base.credentialLimitUnlimited')"
             :disabled="pending"
             :aria-label="t('group.settings.base.credentialRpmLimit')"
-            @input="emit('update:credentialRpmLimit', parseLimit(($event.target as HTMLInputElement).value))"
+            @input="
+              emit(
+                'update:credentialRpmLimit',
+                parseNonNegativeSafeInteger(($event.target as HTMLInputElement).value),
+              )
+            "
           />
         </div>
         <small>{{ t('group.settings.base.credentialRpmLimitHint') }}</small>
@@ -322,7 +321,7 @@ function parameterPlaceholder(field: ChannelFieldDto): string | undefined {
             @input="
               emit(
                 'update:credentialConcurrencyLimit',
-                parseLimit(($event.target as HTMLInputElement).value),
+                parseNonNegativeSafeInteger(($event.target as HTMLInputElement).value),
               )
             "
           />

@@ -188,12 +188,13 @@ func (r *CredentialRegistry) syncSchedulingGroupLocked(groupID uint) {
 	r.scheduling.SyncCredentials(groupID, views)
 }
 
-// WithCredentialCandidates 固定本次凭据身份与权重，回调中只允许内存调度。
-// 锁顺序为 Registry 读锁 -> SchedulingState；不得反向获取 Registry 锁。
+// WithCredentialCandidates 固定本次凭据身份与权重；回调在释放 Registry
+// 读锁后执行，只允许使用这批 detached 的内存候选。
 func (r *CredentialRegistry) WithCredentialCandidates(groupIDs []uint, excluded func(uint) bool,
 	now time.Time, fn func([]CredentialMeta),
 ) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-	fn(r.collectCredentialCandidatesLocked(groupIDs, excluded, now))
+	metas := r.collectCredentialCandidatesLocked(groupIDs, excluded, now)
+	r.mu.RUnlock()
+	fn(metas)
 }

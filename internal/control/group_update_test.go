@@ -9,6 +9,7 @@ import (
 	"gpt-load/internal/catalog"
 	"gpt-load/internal/channel"
 	app_errors "gpt-load/internal/platform/errors"
+	"gpt-load/internal/state"
 	"gpt-load/internal/storage/models"
 )
 
@@ -257,6 +258,8 @@ func TestGroupCredentialLimitsPersistAndResolve(t *testing.T) {
 	for _, request := range []GroupSettingsUpdateRequest{
 		{CredentialRPMLimit: optionalField[int64]{Set: true, Null: true}},
 		{CredentialConcurrencyLimit: optionalField[int64]{Set: true, Value: -1}},
+		{CredentialRPMLimit: optionalField[int64]{Set: true, Value: state.MaxJSONSafeInteger + 1}},
+		{CredentialConcurrencyLimit: optionalField[int64]{Set: true, Value: state.MaxJSONSafeInteger + 1}},
 	} {
 		if _, err := fixture.service.UpdateGroupSettings(t.Context(), created.GroupID, request); !errors.Is(err, app_errors.ErrValidation) {
 			t.Fatalf("invalid group limit error = %v, want validation", err)
@@ -266,5 +269,10 @@ func TestGroupCredentialLimitsPersistAndResolve(t *testing.T) {
 		RPMLimit: optionalField[int64]{Set: true, Value: -1},
 	}); !errors.Is(err, app_errors.ErrValidation) {
 		t.Fatalf("invalid credential limit error = %v, want validation", err)
+	}
+	if _, err := fixture.service.UpdateGroupCredential(t.Context(), created.GroupID, collection.Items[0].CredentialID, CredentialUpdateRequest{
+		RPMLimit: optionalField[int64]{Set: true, Value: state.MaxJSONSafeInteger + 1},
+	}); !errors.Is(err, app_errors.ErrValidation) {
+		t.Fatalf("unsafe credential limit error = %v, want validation", err)
 	}
 }

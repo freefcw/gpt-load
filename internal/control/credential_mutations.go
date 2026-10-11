@@ -68,7 +68,7 @@ func normalizeCredentialUpdate(
 		if !field.in.Set {
 			continue
 		}
-		if field.in.Null || field.in.Value < 0 {
+		if field.in.Null || field.in.Value < 0 || field.in.Value > state.MaxJSONSafeInteger {
 			return nil, nil, false, credentialLimitUpdate{}, nil, false, app_errors.ErrValidation
 		}
 		value := field.in.Value

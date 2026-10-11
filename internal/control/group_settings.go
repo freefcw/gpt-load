@@ -246,7 +246,7 @@ func normalizeGroupSettingsUpdate(
 		if !limit.field.Set {
 			continue
 		}
-		if limit.field.Null || limit.field.Value < 0 {
+		if limit.field.Null || limit.field.Value < 0 || limit.field.Value > state.MaxJSONSafeInteger {
 			return normalizedGroupSettingsUpdate{}, app_errors.ErrValidation
 		}
 		value := limit.field.Value

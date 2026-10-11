@@ -63,7 +63,7 @@ const (
 	maxRequestLogRetentionDays     = 365
 	defaultAffinityCapacity        = 10_000
 	maxAffinityCapacity            = 1_000_000
-	maxJSONSafeInteger             = int64(1<<53 - 1)
+	MaxJSONSafeInteger             = int64(1<<53 - 1)
 )
 
 type RuntimeSettings struct {
@@ -504,7 +504,7 @@ func nonNegativeWholeNumber(path string, value any) (int, error) {
 	// Settings are exposed as JSON numbers and consumed by the management UI.
 	// Keep the technical boundary lossless across Go and JavaScript; there is
 	// no smaller product-level limit.
-	maximum := big.NewInt(maxJSONSafeInteger)
+	maximum := big.NewInt(MaxJSONSafeInteger)
 	if number.Sign() < 0 || number.Cmp(maximum) > 0 {
 		return 0, fmt.Errorf("%s must be a non-negative whole number within JSON safe integer range", path)
 	}

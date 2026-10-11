@@ -17,6 +17,7 @@ import {
 import { AppButton, AppCollectionState, AppSwitch, AppTextField } from '@modern/components/ui'
 import { useApiClient } from '@shared/http/client-context'
 import { getGroupSettings, groupSettingsKey, type GroupSettings } from '@modern/api/group-detail'
+import { parseNonNegativeSafeInteger } from '@shared/non-negative-limit'
 
 const props = defineProps<{ group: GroupRow; operationPending?: boolean }>()
 const emit = defineEmits<{
@@ -60,11 +61,8 @@ const nameInvalid = computed(
 )
 const priorityInvalid = computed(() => !isValidGroupPriority(priority.value))
 // 分组限额留空即 0，0 表示不限。
-function limitValue(value: string): number {
-  return value.trim() === '' ? 0 : Number(value.trim())
-}
 function limitInvalid(value: string): boolean {
-  const parsed = limitValue(value)
+  const parsed = parseNonNegativeSafeInteger(value)
   return !Number.isSafeInteger(parsed) || parsed < 0
 }
 const credentialRpmInvalid = computed(() => limitInvalid(credentialRpmLimit.value))
@@ -86,8 +84,9 @@ const dirty = computed(
     (name.value !== saved.value.name ||
       priority.value !== String(saved.value.priority) ||
       weight.value !== String(saved.value.weight ?? 50) ||
-      limitValue(credentialRpmLimit.value) !== saved.value.credentialRpmLimit ||
-      limitValue(credentialConcurrencyLimit.value) !== saved.value.credentialConcurrencyLimit ||
+      parseNonNegativeSafeInteger(credentialRpmLimit.value) !== saved.value.credentialRpmLimit ||
+      parseNonNegativeSafeInteger(credentialConcurrencyLimit.value) !==
+        saved.value.credentialConcurrencyLimit ||
       price.value !== saved.value.priceMultiplier ||
       enabled.value !== saved.value.enabled),
 )
@@ -177,10 +176,15 @@ async function save(): Promise<void> {
   if (name.value.trim() !== saved.value.name) patch.name = name.value.trim()
   if (Number(weight.value) !== (saved.value.weight ?? 50))
     patch.weight_manual = Number(weight.value)
-  if (limitValue(credentialRpmLimit.value) !== saved.value.credentialRpmLimit)
-    patch.credential_rpm_limit = limitValue(credentialRpmLimit.value)
-  if (limitValue(credentialConcurrencyLimit.value) !== saved.value.credentialConcurrencyLimit)
-    patch.credential_concurrency_limit = limitValue(credentialConcurrencyLimit.value)
+  if (parseNonNegativeSafeInteger(credentialRpmLimit.value) !== saved.value.credentialRpmLimit)
+    patch.credential_rpm_limit = parseNonNegativeSafeInteger(credentialRpmLimit.value)
+  if (
+    parseNonNegativeSafeInteger(credentialConcurrencyLimit.value) !==
+    saved.value.credentialConcurrencyLimit
+  )
+    patch.credential_concurrency_limit = parseNonNegativeSafeInteger(
+      credentialConcurrencyLimit.value,
+    )
   if (Number(price.value) !== Number(saved.value.priceMultiplier))
     patch.price_multiplier = price.value.trim()
   if (enabled.value !== saved.value.enabled) patch.enabled = enabled.value

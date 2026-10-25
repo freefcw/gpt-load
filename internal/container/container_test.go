@@ -706,6 +706,53 @@ func TestBuildContainerUsesSingletonAccessKeyRPMLimiter(t *testing.T) {
 	}
 }
 
+func TestBuildContainerSharesCredentialLimiter(t *testing.T) {
+	t.Setenv("AUTH_KEY", "test-auth-key")
+	t.Setenv("DATA_DIR", t.TempDir())
+	t.Setenv("DATABASE_DSN", ":memory:")
+	t.Setenv("ENCRYPTION_KEY", "test-master-key-long")
+
+	dependencyContainer, err := BuildContainer()
+	if err != nil {
+		t.Fatalf("BuildContainer() error = %v", err)
+	}
+	err = dependencyContainer.Invoke(func(
+		limiter *ratelimit.CredentialLimiter,
+		handler *gateway.Handler,
+		service *control.Service,
+		db *gorm.DB,
+	) {
+		t.Cleanup(func() {
+			sqlDB, dbErr := db.DB()
+			if dbErr == nil {
+				_ = sqlDB.Close()
+			}
+		})
+		want := reflect.ValueOf(limiter).Pointer()
+		if got := interfacePointer(t, reflect.ValueOf(handler).Elem().FieldByName("credentialLimiter")); got != want {
+			t.Fatalf("gateway credential limiter = %#x, want %#x", got, want)
+		}
+		if got := interfacePointer(t, reflect.ValueOf(service).Elem().FieldByName("limitUsage")); got != want {
+			t.Fatalf("control credential limiter = %#x, want %#x", got, want)
+		}
+	})
+	if err != nil {
+		t.Fatalf("resolve credential limiter: %v", err)
+	}
+}
+
+func interfacePointer(t *testing.T, value reflect.Value) uintptr {
+	t.Helper()
+	if !value.IsValid() || value.Kind() != reflect.Interface || value.IsNil() {
+		t.Fatalf("expected non-nil interface, got %#v", value)
+	}
+	concrete := value.Elem()
+	if concrete.Kind() != reflect.Pointer || concrete.IsNil() {
+		t.Fatalf("expected pointer, got %s", concrete.Kind())
+	}
+	return concrete.Pointer()
+}
+
 func TestBuildContainerWiresSingletonMutationCoordinator(t *testing.T) {
 	t.Setenv("AUTH_KEY", "test-auth-key")
 	t.Setenv("DATA_DIR", t.TempDir())

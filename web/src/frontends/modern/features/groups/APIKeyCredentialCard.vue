@@ -18,6 +18,7 @@ import { dateFormatter } from '@modern/components/ui/intl-formatters'
 import { credentialStatus, credentialTime } from './credential-presentation'
 import CredentialCardActions from './CredentialCardActions.vue'
 import CredentialCardFrame from './CredentialCardFrame.vue'
+import CredentialLiveUsage from './CredentialLiveUsage.vue'
 import CredentialOutcomeSummary from './CredentialOutcomeSummary.vue'
 import CredentialRoutingMeta from './CredentialRoutingMeta.vue'
 
@@ -164,6 +165,7 @@ const issues = computed(() =>
         </div>
       </AppTooltip>
     </dl>
+    <CredentialLiveUsage :row="row" />
     <template #footer
       ><AppBadge
         v-if="testState"

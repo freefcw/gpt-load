@@ -286,6 +286,14 @@ func (unlimitedCredentialLimiter) Acquire(uint, int64, int64) (func(), bool) {
 	return func() {}, true
 }
 
+// UseCredentialLimiter 让管理面和网关读取同一份凭据限额计数。
+func (handler *Handler) UseCredentialLimiter(limiter credentialSlotLimiter) {
+	if handler == nil || limiter == nil {
+		return
+	}
+	handler.credentialLimiter = limiter
+}
+
 func (handler *Handler) acquireCredentialSlot(selection scheduler.Selection) (func(), bool) {
 	limiter := handler.credentialLimiter
 	if limiter == nil {

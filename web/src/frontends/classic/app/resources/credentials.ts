@@ -633,8 +633,13 @@ export function projectCredentialItem(value: unknown): CredentialItemDto {
     }),
     group_rpm_limit: projectSafeInteger(record.group_rpm_limit, { minimum: 0 }),
     group_concurrency_limit: projectSafeInteger(record.group_concurrency_limit, { minimum: 0 }),
-    rpm_used: projectSafeInteger(record.rpm_used, { minimum: 0 }),
-    concurrency_used: projectSafeInteger(record.concurrency_used, { minimum: 0 }),
+    // 滚动升级时请求可能打到还没有这两个字段的旧后端。缺省按 0 读，
+    // 避免整份凭据列表被拒绝；新后端始终返回实际计数。
+    rpm_used: record.rpm_used == null ? 0 : projectSafeInteger(record.rpm_used, { minimum: 0 }),
+    concurrency_used:
+      record.concurrency_used == null
+        ? 0
+        : projectSafeInteger(record.concurrency_used, { minimum: 0 }),
     recent_success_count: projectSafeInteger(record.recent_success_count, { minimum: 0 }),
     recent_failure_count: projectSafeInteger(record.recent_failure_count, { minimum: 0 }),
     consecutive_failure_count: projectSafeInteger(record.consecutive_failure_count, { minimum: 0 }),

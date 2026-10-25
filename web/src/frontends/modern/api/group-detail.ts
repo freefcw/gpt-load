@@ -343,8 +343,10 @@ export function readCredential(value: unknown): CredentialRow {
     effectiveConcurrencyLimit: integer(row.effective_concurrency_limit),
     groupRpmLimit: integer(row.group_rpm_limit),
     groupConcurrencyLimit: integer(row.group_concurrency_limit),
-    rpmUsed: integer(row.rpm_used),
-    concurrencyUsed: integer(row.concurrency_used),
+    // 滚动升级时请求可能打到还没有这两个字段的旧后端。缺省按 0 读，
+    // 避免整份凭据列表被拒绝；新后端始终返回实际计数。
+    rpmUsed: row.rpm_used == null ? 0 : integer(row.rpm_used),
+    concurrencyUsed: row.concurrency_used == null ? 0 : integer(row.concurrency_used),
     weightManual:
       row.weight_manual === undefined
         ? undefined

@@ -50,17 +50,22 @@ func (limiter *CredentialLimiter) availableLocked(credentialID uint, rpmLimit, c
 	return available
 }
 
+func (limiter *CredentialLimiter) pruneWindowLocked(credentialID uint, now time.Time) timestampDeque {
+	window := limiter.windows[credentialID]
+	window.dropThrough(now.Add(-time.Minute))
+	if window.len() == 0 {
+		delete(limiter.windows, credentialID)
+	} else {
+		limiter.windows[credentialID] = window
+	}
+	return window
+}
+
 func (limiter *CredentialLimiter) availableWithRetryAfterLocked(credentialID uint, rpmLimit, concurrencyLimit int64, now time.Time) (bool, time.Time) {
 	concurrencyBlocked := concurrencyLimit > 0 && limiter.inFlight[credentialID] >= concurrencyLimit
 	var retryAfter time.Time
 	if rpmLimit > 0 {
-		window := limiter.windows[credentialID]
-		window.dropThrough(now.Add(-time.Minute))
-		if window.len() == 0 {
-			delete(limiter.windows, credentialID)
-		} else {
-			limiter.windows[credentialID] = window
-		}
+		window := limiter.pruneWindowLocked(credentialID, now)
 		if int64(window.len()) >= rpmLimit {
 			retryAfter = window.at(window.len() - int(rpmLimit)).Add(time.Minute)
 		}
@@ -113,10 +118,7 @@ func (limiter *CredentialLimiter) RetryAfter(credentialID uint, rpmLimit int64) 
 	}
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()
-	now := limiter.now()
-	window := limiter.windows[credentialID]
-	window.dropThrough(now.Add(-time.Minute))
-	limiter.windows[credentialID] = window
+	window := limiter.pruneWindowLocked(credentialID, limiter.now())
 	count := window.len()
 	if int64(count) < rpmLimit {
 		return time.Time{}
@@ -132,13 +134,7 @@ func (limiter *CredentialLimiter) Usage(credentialID uint) (rpmUsed, inFlight in
 	}
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()
-	window := limiter.windows[credentialID]
-	window.dropThrough(limiter.now().Add(-time.Minute))
-	if window.len() == 0 {
-		delete(limiter.windows, credentialID)
-	} else {
-		limiter.windows[credentialID] = window
-	}
+	window := limiter.pruneWindowLocked(credentialID, limiter.now())
 	return int64(window.len()), limiter.inFlight[credentialID]
 }
 

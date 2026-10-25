@@ -70,9 +70,11 @@ func TestCredentialLimiterUsageReportsWindowAndInFlight(t *testing.T) {
 	if !ok {
 		t.Fatal("acquire rejected")
 	}
-	if _, ok := limiter.Acquire(7, 3, 2); !ok {
+	secondRelease, ok := limiter.Acquire(7, 3, 2)
+	if !ok {
 		t.Fatal("second acquire rejected")
 	}
+	defer secondRelease()
 	if rpmUsed, inFlight := limiter.Usage(7); rpmUsed != 2 || inFlight != 2 {
 		t.Fatalf("active usage = %d/%d, want 2/2", rpmUsed, inFlight)
 	}
@@ -89,6 +91,9 @@ func TestCredentialLimiterUsageReportsWindowAndInFlight(t *testing.T) {
 	clock.set(base.Add(time.Minute))
 	if rpmUsed, inFlight := limiter.Usage(7); rpmUsed != 0 || inFlight != 1 {
 		t.Fatalf("expired window usage = %d/%d, want 0/1", rpmUsed, inFlight)
+	}
+	if len(limiter.windows) != 0 {
+		t.Fatalf("expired window state = %d entries, want 0", len(limiter.windows))
 	}
 }
 

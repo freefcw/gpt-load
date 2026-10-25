@@ -277,6 +277,9 @@ export interface CredentialRow {
   effectiveConcurrencyLimit: number
   groupRpmLimit: number
   groupConcurrencyLimit: number
+  // 当前进程内的限额计数。上限为 0 时不记账，值为 0。
+  rpmUsed: number
+  concurrencyUsed: number
   successes: number
   failures: number
   failuresInRow: number
@@ -340,6 +343,10 @@ export function readCredential(value: unknown): CredentialRow {
     effectiveConcurrencyLimit: integer(row.effective_concurrency_limit),
     groupRpmLimit: integer(row.group_rpm_limit),
     groupConcurrencyLimit: integer(row.group_concurrency_limit),
+    // 滚动升级时请求可能打到还没有这两个字段的旧后端。缺省按 0 读，
+    // 避免整份凭据列表被拒绝；新后端始终返回实际计数。
+    rpmUsed: row.rpm_used == null ? 0 : integer(row.rpm_used),
+    concurrencyUsed: row.concurrency_used == null ? 0 : integer(row.concurrency_used),
     weightManual:
       row.weight_manual === undefined
         ? undefined

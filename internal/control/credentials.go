@@ -79,40 +79,43 @@ type CredentialAccountResponse struct {
 }
 
 type CredentialItemResponse struct {
-	Name                    string                         `json:"name"`
-	RPMPeakHour             *int64                         `json:"-"`
-	ModelCooldowns          []ModelCooldownResponse        `json:"model_cooldowns"`
-	CredentialID            uint                           `json:"credential_id"`
-	ConnectionType          string                         `json:"connection_type"`
-	SecretVersion           uint64                         `json:"secret_version"`
-	Mask                    string                         `json:"mask"`
-	Account                 CredentialAccountResponse      `json:"account"`
-	AuthState               string                         `json:"auth_state"`
-	AuthErrorCode           string                         `json:"auth_error_code,omitempty"`
-	Observation             *CredentialObservationResponse `json:"observation,omitempty"`
-	ConfiguredStatus        string                         `json:"configured_status"`
-	EffectiveStatus         string                         `json:"effective_status"`
-	Weight                  int                            `json:"weight"`
-	WeightManual            *int                           `json:"-"` // 仅新版展示投影使用，经典接口不增加字段。
-	RPMLimit                int64                          `json:"rpm_limit"`
-	ConcurrencyLimit        int64                          `json:"concurrency_limit"`
+	Name             string                         `json:"name"`
+	RPMPeakHour      *int64                         `json:"-"`
+	ModelCooldowns   []ModelCooldownResponse        `json:"model_cooldowns"`
+	CredentialID     uint                           `json:"credential_id"`
+	ConnectionType   string                         `json:"connection_type"`
+	SecretVersion    uint64                         `json:"secret_version"`
+	Mask             string                         `json:"mask"`
+	Account          CredentialAccountResponse      `json:"account"`
+	AuthState        string                         `json:"auth_state"`
+	AuthErrorCode    string                         `json:"auth_error_code,omitempty"`
+	Observation      *CredentialObservationResponse `json:"observation,omitempty"`
+	ConfiguredStatus string                         `json:"configured_status"`
+	EffectiveStatus  string                         `json:"effective_status"`
+	Weight           int                            `json:"weight"`
+	WeightManual     *int                           `json:"-"` // 仅新版展示投影使用，经典接口不增加字段。
+	RPMLimit         int64                          `json:"rpm_limit"`
+	ConcurrencyLimit int64                          `json:"concurrency_limit"`
 	// Effective* 是解析继承后的实际生效值，Group* 是分组默认值，界面据此区分
 	// "继承自分组"和"已单独覆盖"。
-	EffectiveRPMLimit         int64                         `json:"effective_rpm_limit"`
-	EffectiveConcurrencyLimit int64                         `json:"effective_concurrency_limit"`
-	GroupRPMLimit             int64                         `json:"group_rpm_limit"`
-	GroupConcurrencyLimit     int64                         `json:"group_concurrency_limit"`
-	RecentSuccessCount      uint64                         `json:"recent_success_count"`
-	RecentFailureCount      uint64                         `json:"recent_failure_count"`
-	ConsecutiveFailureCount uint64                         `json:"consecutive_failure_count"`
-	LastFailureCategory     string                         `json:"last_failure_category"`
-	LastFailureSummary      string                         `json:"last_failure_summary,omitempty"`
-	LastStatusCode          *int                           `json:"last_status_code"`
-	CooldownUntilMS         *int64                         `json:"cooldown_until_ms"`
-	LastUsedAtMS            *int64                         `json:"last_used_at_ms,omitempty"`
-	DailyUsage              *CredentialDailyUsageResponse  `json:"daily_usage,omitempty"`
-	Recovery                CredentialRecoveryResponse     `json:"recovery"`
-	Proxy                   outboundproxy.View             `json:"proxy"`
+	EffectiveRPMLimit         int64 `json:"effective_rpm_limit"`
+	EffectiveConcurrencyLimit int64 `json:"effective_concurrency_limit"`
+	GroupRPMLimit             int64 `json:"group_rpm_limit"`
+	GroupConcurrencyLimit     int64 `json:"group_concurrency_limit"`
+	// RPMUsed / ConcurrencyUsed 是当前进程内的限额计数，不落库。上限为 0 时限流器不记账，值为 0。
+	RPMUsed                 int64                         `json:"rpm_used"`
+	ConcurrencyUsed         int64                         `json:"concurrency_used"`
+	RecentSuccessCount      uint64                        `json:"recent_success_count"`
+	RecentFailureCount      uint64                        `json:"recent_failure_count"`
+	ConsecutiveFailureCount uint64                        `json:"consecutive_failure_count"`
+	LastFailureCategory     string                        `json:"last_failure_category"`
+	LastFailureSummary      string                        `json:"last_failure_summary,omitempty"`
+	LastStatusCode          *int                          `json:"last_status_code"`
+	CooldownUntilMS         *int64                        `json:"cooldown_until_ms"`
+	LastUsedAtMS            *int64                        `json:"last_used_at_ms,omitempty"`
+	DailyUsage              *CredentialDailyUsageResponse `json:"daily_usage,omitempty"`
+	Recovery                CredentialRecoveryResponse    `json:"recovery"`
+	Proxy                   outboundproxy.View            `json:"proxy"`
 }
 
 // CredentialDailyUsageResponse 汇报固定 24 小时窗口内的上游尝试结果分布。
@@ -449,6 +452,7 @@ func (s *Service) mapCredentialCollection(
 		if err != nil {
 			return CredentialCollectionResponse{}, err
 		}
+		s.applyCredentialLiveUsage(&item)
 		item.Name = row.Name
 		item.ConnectionType = string(normalizeGroupConnectionType(observation.group.ConnectionType))
 		item.SecretVersion = row.SecretVersion

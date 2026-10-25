@@ -24,6 +24,7 @@ import CredentialCardActions from './CredentialCardActions.vue'
 import CredentialOutcomeSummary from './CredentialOutcomeSummary.vue'
 import CredentialQuotaRows from './CredentialQuotaRows.vue'
 import CredentialPlanBadge from './CredentialPlanBadge.vue'
+import CredentialLiveUsage from './CredentialLiveUsage.vue'
 import { credentialStatus, credentialTime } from './credential-presentation'
 
 const props = defineProps<{
@@ -144,6 +145,7 @@ useLoadingActivity(() => Boolean(props.pending))
           reveal
           @dirty="$emit('nameDirty', $event)"
         />
+        <CredentialLiveUsage class="modern-subscription-card-usage" :row="row" inline />
         <div class="modern-subscription-card-status-actions">
           <AppIconButton
             v-if="channel?.quotaObservation"
@@ -365,8 +367,13 @@ useLoadingActivity(() => Boolean(props.pending))
 .modern-subscription-card-name-line {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--modern-space-2);
   min-width: 0;
+}
+.modern-subscription-card-usage {
+  flex: none;
+  max-width: 100%;
 }
 .modern-subscription-card-select {
   flex: none;

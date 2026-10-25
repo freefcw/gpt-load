@@ -172,11 +172,44 @@ func NewHandler(
 	priceTables PriceTableProvider,
 	accessQuotas ...*accessquota.Runtime,
 ) *Handler {
+	return newHandler(
+		manager,
+		registry,
+		encryptionService,
+		forwarder,
+		dialects,
+		stats,
+		mutations,
+		limiter,
+		requestLogSink,
+		priceTables,
+		ratelimit.NewCredentialLimiter(),
+		accessQuotas...,
+	)
+}
+
+func newHandler(
+	manager *state.Manager,
+	registry *state.CredentialRegistry,
+	encryptionService encryption.Service,
+	forwarder AttemptForwarder,
+	dialects dialect.Set,
+	stats *health.StatsStore,
+	mutations *health.MutationCoordinator,
+	limiter AccessKeyRPMLimiter,
+	requestLogSink telemetry.RequestLogSink,
+	priceTables PriceTableProvider,
+	credentialLimiter credentialSlotLimiter,
+	accessQuotas ...*accessquota.Runtime,
+) *Handler {
 	if limiter == nil {
 		limiter = unlimitedAccessKeyRPMLimiter{}
 	}
 	if requestLogSink == nil {
 		requestLogSink = telemetry.NoopRequestLogSink{}
+	}
+	if credentialLimiter == nil {
+		credentialLimiter = ratelimit.NewCredentialLimiter()
 	}
 	manager.SetSchedulingState(registry.SchedulingState())
 	channels := channel.NewRegistry()
@@ -187,7 +220,7 @@ func NewHandler(
 		limiter: limiter, requestLogSink: requestLogSink, priceTables: priceTables,
 		affinityCache:     affinity.NewCache(),
 		invalidLineage:    codexrecovery.NewInvalidLineage(),
-		credentialLimiter: ratelimit.NewCredentialLimiter(),
+		credentialLimiter: credentialLimiter,
 		responseBindings:  state.NewResponseBindings(),
 		websocketLimits:   defaultWebsocketLimits(),
 		liveSessions:      newLiveSessions(),
@@ -236,8 +269,9 @@ func NewHandlerWithLifecycle(
 	responseBindings *state.ResponseBindings,
 	catalogRuntime *catalog.Runtime,
 	usageReader AccessKeyUsageReader,
+	credentialLimiter *ratelimit.CredentialLimiter,
 ) *Handler {
-	handler := NewHandler(
+	handler := newHandler(
 		manager,
 		registry,
 		encryptionService,
@@ -248,6 +282,7 @@ func NewHandlerWithLifecycle(
 		limiter,
 		requestLogSink,
 		priceTables,
+		credentialLimiter,
 		accessQuota,
 	)
 	if channelRegistry != nil {
@@ -284,14 +319,6 @@ func (unlimitedCredentialLimiter) RetryAfter(uint, int64) time.Time { return tim
 
 func (unlimitedCredentialLimiter) Acquire(uint, int64, int64) (func(), bool) {
 	return func() {}, true
-}
-
-// UseCredentialLimiter 让管理面和网关读取同一份凭据限额计数。
-func (handler *Handler) UseCredentialLimiter(limiter credentialSlotLimiter) {
-	if handler == nil || limiter == nil {
-		return
-	}
-	handler.credentialLimiter = limiter
 }
 
 func (handler *Handler) acquireCredentialSlot(selection scheduler.Selection) (func(), bool) {

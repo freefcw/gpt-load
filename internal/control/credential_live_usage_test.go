@@ -32,15 +32,17 @@ func TestCredentialCollectionIncludesLiveLimitUsage(t *testing.T) {
 	}
 
 	limiter := ratelimit.NewCredentialLimiter()
-	fixture.service.SetCredentialLimitUsage(limiter)
+	fixture.service.limitUsage = limiter
 	release, ok := limiter.Acquire(id, 4, 2)
 	if !ok {
 		t.Fatal("acquire rejected")
 	}
 	defer release()
-	if _, ok := limiter.Acquire(id, 4, 2); !ok {
+	secondRelease, ok := limiter.Acquire(id, 4, 2)
+	if !ok {
 		t.Fatal("second acquire rejected")
 	}
+	defer secondRelease()
 
 	collection, err = fixture.service.ListGroupCredentials(t.Context(), created.GroupID, query)
 	if err != nil {

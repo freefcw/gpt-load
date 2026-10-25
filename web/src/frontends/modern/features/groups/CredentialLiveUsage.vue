@@ -2,40 +2,31 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CredentialRow } from '@modern/api/group-detail'
+import { describeLiveLimitUsage, type LiveLimitUsageTone } from '@shared/live-limit-usage'
 import { AppProgressBar, AppTooltip, type SemanticTone } from '@modern/components/ui'
 
 const props = defineProps<{ row: CredentialRow; inline?: boolean }>()
 const { t, n } = useI18n()
 
-// 上限为 0 时限流器不记账，已用数恒为 0。这时只显示“不限”，避免写出 0/∞。
-function unlimited(limit: number) {
-  return limit <= 0
+const semanticTone: Record<LiveLimitUsageTone, SemanticTone> = {
+  unlimited: 'info',
+  success: 'success',
+  warning: 'warning',
+  danger: 'danger',
 }
-function remaining(used: number, limit: number) {
-  if (unlimited(limit)) return 100
-  return Math.max(0, Math.min(100, ((limit - used) / limit) * 100))
-}
-function tone(used: number, limit: number): SemanticTone {
-  if (unlimited(limit)) return 'info'
-  const left = remaining(used, limit)
-  if (used >= limit || left < 30) return 'danger'
-  if (left < 70) return 'warning'
-  return 'success'
-}
-function value(used: number, limit: number) {
-  return unlimited(limit)
+
+function describeMeter(key: string, label: string, helpText: string, used: number, limit: number) {
+  const usage = describeLiveLimitUsage(used, limit)
+  const display = usage.unlimited
     ? '∞'
     : t('credentialCards.liveUsage.summary', { used: n(used), limit: n(limit) })
-}
-function describeMeter(key: string, label: string, helpText: string, used: number, limit: number) {
-  const display = value(used, limit)
   return {
     key,
     label,
     display,
     help: `${label} ${display}\n${helpText}`,
-    tone: tone(used, limit),
-    remaining: remaining(used, limit),
+    tone: semanticTone[usage.tone],
+    remaining: usage.remainingPercent,
   }
 }
 const meters = computed(() => [

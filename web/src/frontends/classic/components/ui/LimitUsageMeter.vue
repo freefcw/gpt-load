@@ -2,8 +2,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { describeLiveLimitUsage } from '@shared/live-limit-usage'
 import QuotaProgressBar from '@/components/ui/QuotaProgressBar.vue'
-import { quotaProgressTone } from '@/lib/quota-progress'
 
 // 限额实时用量：已用/上限 + 进度条。上限为 0 时限流器不记账，已用数恒为 0，
 // 所以不写“0/∞”，只留 ∞，并用独立颜色表示“没有上限”。
@@ -15,27 +15,18 @@ const props = defineProps<{
 }>()
 const { n } = useI18n()
 
-const unlimited = computed(() => props.limit <= 0)
-const remainingPercent = computed(() => {
-  if (unlimited.value) return 100
-  return Math.max(0, Math.min(100, ((props.limit - props.used) / props.limit) * 100))
-})
-const tone = computed(() =>
-  unlimited.value
-    ? ('unlimited' as const)
-    : quotaProgressTone(remainingPercent.value, props.used >= props.limit),
-)
-const text = computed(() => (unlimited.value ? '∞' : `${n(props.used)}/${n(props.limit)}`))
+const usage = computed(() => describeLiveLimitUsage(props.used, props.limit))
+const text = computed(() => (usage.value.unlimited ? '∞' : `${n(props.used)}/${n(props.limit)}`))
 </script>
 
 <template>
   <span class="limit-usage" :class="{ 'limit-usage--compact': compact }">
     <span class="limit-usage__label">{{ label }}</span>
-    <span class="limit-usage__value" :class="`limit-usage__value--${tone}`">{{ text }}</span>
+    <span class="limit-usage__value" :class="`limit-usage__value--${usage.tone}`">{{ text }}</span>
     <QuotaProgressBar
       class="limit-usage__bar"
-      :value="remainingPercent"
-      :tone="tone"
+      :value="usage.remainingPercent"
+      :tone="usage.tone"
       :label="label"
       :value-text="text"
       compact

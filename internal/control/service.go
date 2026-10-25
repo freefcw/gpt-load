@@ -61,7 +61,7 @@ type Service struct {
 	credentialActivity                credentialActivityReader
 	homeStatistics                    HomeStatisticsReader
 	stats                             *health.StatsStore
-	limitUsage                        credentialLimitUsage
+	limitUsage                        CredentialLimitUsage
 	mutations                         credentialMutationCoordinator
 	requestLogStats                   RequestLogStatsReader
 	accessQuota                       *accessquota.Runtime
@@ -167,6 +167,7 @@ func NewService(
 	mutations *health.MutationCoordinator,
 	requestLogStats RequestLogStatsReader,
 	accessQuota *accessquota.Runtime,
+	limitUsage CredentialLimitUsage,
 	channelRegistries ...*channel.Registry,
 ) *Service {
 	channelRegistry := channel.NewRegistry()
@@ -187,7 +188,8 @@ func NewService(
 		catalogRuntime:  catalogRuntime,
 		encryption:      encryptionService, executor: executor, subscriptions: subscriptions, requestLogs: requestLogs,
 		usageStats: usageStats, homeStatistics: homeStatistics,
-		stats: stats, mutations: mutations, requestLogStats: requestLogStats, accessQuota: accessQuota,
+		stats: stats, limitUsage: limitUsage, mutations: mutations,
+		requestLogStats: requestLogStats, accessQuota: accessQuota,
 		modelDiscoveryTimeout: defaultModelDiscoveryTimeout,
 		random:                rand.Reader,
 		operationRandom:       rand.Reader,

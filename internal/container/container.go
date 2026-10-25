@@ -85,6 +85,7 @@ func BuildContainer(configure ...func(*dig.Container) error) (*dig.Container, er
 		func(limiter *ratelimit.AccessKeyRPM) gateway.AccessKeyRPMLimiter {
 			return limiter
 		},
+		ratelimit.NewCredentialLimiter,
 		func(manager *state.Manager) requestlog.RetentionPolicyProvider {
 			return retentionSnapshotProvider{manager: manager}
 		},
@@ -268,10 +269,21 @@ func BuildContainer(configure ...func(*dig.Container) error) (*dig.Container, er
 		adapter *cpaexecutor.Adapter,
 		cfg *config.Config,
 		memory memlimit.Memory,
+		limiter *ratelimit.CredentialLimiter,
 	) *gateway.Handler {
+		handler.UseCredentialLimiter(limiter)
 		handler.ConfigureCodexLive(adapter, cfg.CodexLive)
 		handler.ConfigureRequestBodyLimit(memory)
 		return handler
+	}); err != nil {
+		return nil, err
+	}
+	if err := dependencyContainer.Decorate(func(
+		service *control.Service,
+		limiter *ratelimit.CredentialLimiter,
+	) *control.Service {
+		service.SetCredentialLimitUsage(limiter)
+		return service
 	}); err != nil {
 		return nil, err
 	}

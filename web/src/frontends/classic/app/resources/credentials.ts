@@ -34,6 +34,7 @@ import type {
 } from '@/api/control/types'
 import { InvalidResponseError } from '@shared/http/errors'
 import { controlQueryKeys, normalizeCredentialCollectionFilters } from '@/app/query-keys'
+import { liveLimitUsageRefetchIntervalMs } from '@/app/resources/live-limit-usage'
 
 import {
   assertNoSecretLikeFields,
@@ -119,6 +120,8 @@ const credentialItemFields = [
   'effective_concurrency_limit',
   'group_rpm_limit',
   'group_concurrency_limit',
+  'rpm_used',
+  'concurrency_used',
   'recent_success_count',
   'recent_failure_count',
   'consecutive_failure_count',
@@ -630,6 +633,13 @@ export function projectCredentialItem(value: unknown): CredentialItemDto {
     }),
     group_rpm_limit: projectSafeInteger(record.group_rpm_limit, { minimum: 0 }),
     group_concurrency_limit: projectSafeInteger(record.group_concurrency_limit, { minimum: 0 }),
+    // 滚动升级时请求可能打到还没有这两个字段的旧后端。缺省按 0 读，
+    // 避免整份凭据列表被拒绝；新后端始终返回实际计数。
+    rpm_used: record.rpm_used == null ? 0 : projectSafeInteger(record.rpm_used, { minimum: 0 }),
+    concurrency_used:
+      record.concurrency_used == null
+        ? 0
+        : projectSafeInteger(record.concurrency_used, { minimum: 0 }),
     recent_success_count: projectSafeInteger(record.recent_success_count, { minimum: 0 }),
     recent_failure_count: projectSafeInteger(record.recent_failure_count, { minimum: 0 }),
     consecutive_failure_count: projectSafeInteger(record.consecutive_failure_count, { minimum: 0 }),
@@ -835,6 +845,9 @@ export function credentialCollectionQueryOptions(
     queryFn: ({ queryKey, signal }) =>
       getCredentialCollection(client, queryKey[3], queryKey[5], signal),
     placeholderData: keepPreviousData,
+    // 限额用量是进程内实时计数，只能轮询刷新；页面不在前台时停掉。
+    refetchInterval: liveLimitUsageRefetchIntervalMs,
+    refetchIntervalInBackground: false,
   })
 }
 

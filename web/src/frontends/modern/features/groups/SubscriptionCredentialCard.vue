@@ -21,6 +21,7 @@ import CredentialCardActions from './CredentialCardActions.vue'
 import CredentialOutcomeSummary from './CredentialOutcomeSummary.vue'
 import CredentialQuotaRows from './CredentialQuotaRows.vue'
 import CredentialPlanBadge from './CredentialPlanBadge.vue'
+import CredentialLiveUsage from './CredentialLiveUsage.vue'
 import { credentialStatus, credentialTime } from './credential-presentation'
 
 const props = defineProps<{
@@ -107,6 +108,7 @@ useLoadingActivity(() => Boolean(props.pending))
             reveal
             @dirty="$emit('nameDirty', $event)"
           />
+          <CredentialLiveUsage class="modern-subscription-card-usage" :row="row" inline />
           <AppTooltip v-if="row.rpmPeakHour !== undefined" :label="t('rpm.hourPeak')">
             <span class="modern-subscription-card-rpm" tabindex="0"
               >{{ t('rpm.cardLabel') }} {{ n(row.rpmPeakHour) }}</span
@@ -292,9 +294,14 @@ useLoadingActivity(() => Boolean(props.pending))
 }
 .modern-subscription-card-name-line {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
   gap: var(--modern-space-2);
   min-width: 0;
+}
+.modern-subscription-card-usage {
+  flex: none;
+  max-width: 100%;
 }
 .modern-subscription-card-select {
   align-self: flex-start;

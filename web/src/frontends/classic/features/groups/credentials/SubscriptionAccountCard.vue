@@ -37,6 +37,7 @@ import IconButton from '@/components/ui/IconButton.vue'
 import OverflowTooltip from '@/components/ui/OverflowTooltip.vue'
 import SkeletonBlock from '@/components/ui/SkeletonBlock.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
+import LimitUsageMeter from '@/components/ui/LimitUsageMeter.vue'
 import ModelCooldownDetails from '@/components/ui/ModelCooldownDetails.vue'
 import { formatEstimatedCost, formatLocalInstant, formatTokens } from '@/lib/format'
 import { quotaProgressTone } from '@/lib/quota-progress'
@@ -905,6 +906,21 @@ function runMenuAction(
             detail
             reveal
           />
+          <!-- 实时限额贴着账号名右侧：折叠态即可见，又不额外占一整行。 -->
+          <div class="subscription-account__usage">
+            <LimitUsageMeter
+              :label="t('group.credentials.limits.rpmShort')"
+              :used="item.rpm_used"
+              :limit="item.effective_rpm_limit"
+              compact
+            />
+            <LimitUsageMeter
+              :label="t('group.credentials.limits.concurrencyShort')"
+              :used="item.concurrency_used"
+              :limit="item.effective_concurrency_limit"
+              compact
+            />
+          </div>
         </div>
       </header>
 
@@ -1615,6 +1631,20 @@ function runMenuAction(
 .subscription-account__badges > * {
   flex-shrink: 0;
   max-width: 100%;
+}
+/* 两条限额用量与账号名同排右对齐；容器变窄时收窄轨道而不是换行。 */
+.subscription-account__usage {
+  display: grid;
+  flex: 0 1 auto;
+  grid-template-columns: repeat(2, minmax(0, 96px));
+  align-items: start;
+  gap: 1px 12px;
+}
+@container (max-width: 480px) {
+  .subscription-account__usage {
+    grid-template-columns: repeat(2, minmax(0, 74px));
+    column-gap: 8px;
+  }
 }
 .subscription-account__mail {
   min-width: 0;

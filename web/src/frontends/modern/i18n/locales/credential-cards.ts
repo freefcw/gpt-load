@@ -149,6 +149,13 @@ export const zhCN = {
     inheritedValue: '{value}（继承分组）',
     effectiveSummary: '生效：每分钟 {rpm} · 并发 {concurrency}',
   },
+  liveUsage: {
+    rpm: 'RPM',
+    concurrency: '并发',
+    summary: '{used}/{limit}',
+    rpmHelp: '近 60 秒内计入本地限额的请求。没有上限时不计数。',
+    concurrencyHelp: '当前仍在处理的请求。没有上限时不计数。',
+  },
 }
 export const enUS: typeof zhCN = {
   name: 'Name',
@@ -307,6 +314,14 @@ export const enUS: typeof zhCN = {
     inheritedValue: '{value} (inherited from group)',
     effectiveSummary: 'Effective: {rpm} per minute · concurrency {concurrency}',
   },
+  liveUsage: {
+    rpm: 'RPM',
+    concurrency: 'Concurrent',
+    summary: '{used}/{limit}',
+    rpmHelp:
+      'Requests counted against the local limit in the last 60 seconds. Unlimited credentials are not counted.',
+    concurrencyHelp: 'Requests still in flight. Unlimited credentials are not counted.',
+  },
 }
 export const jaJP: typeof zhCN = {
   name: '名前',
@@ -460,5 +475,12 @@ export const jaJP: typeof zhCN = {
     inheritPlaceholder: '継承 {value}',
     inheritedValue: '{value}（グループ継承）',
     effectiveSummary: '実効：毎分 {rpm} · 同時実行 {concurrency}',
+  },
+  liveUsage: {
+    rpm: 'RPM',
+    concurrency: '同時',
+    summary: '{used}/{limit}',
+    rpmHelp: '直近 60 秒にローカル上限へ計上したリクエスト。上限がない場合は計上しません。',
+    concurrencyHelp: '処理中のリクエスト。上限がない場合は計上しません。',
   },
 }

@@ -63,9 +63,10 @@ useLoadingActivity(() => Boolean(props.pending))
 }
 .modern-credential-card.is-compact {
   --modern-credential-card-inset: var(--modern-space-3);
-  height: var(--modern-key-card-height);
+  min-height: var(--modern-key-card-height);
+  height: auto;
   display: grid;
-  grid-template-rows: calc(var(--modern-control-xs) + var(--modern-space-2)) minmax(0, 1fr) var(
+  grid-template-rows: calc(var(--modern-control-xs) + var(--modern-space-2)) auto var(
       --modern-control-sm
     );
 }
@@ -85,9 +86,10 @@ useLoadingActivity(() => Boolean(props.pending))
 }
 @media (max-width: 760px) {
   .modern-credential-card.is-compact {
-    height: calc(var(--modern-key-card-height) + var(--modern-space-10));
+    min-height: calc(var(--modern-key-card-height) + var(--modern-space-10));
+    height: auto;
     grid-template-rows:
-      calc(var(--modern-touch-target) + var(--modern-space-2)) minmax(0, 1fr)
+      calc(var(--modern-touch-target) + var(--modern-space-2)) auto
       calc(var(--modern-touch-target) + var(--modern-space-2));
   }
 }

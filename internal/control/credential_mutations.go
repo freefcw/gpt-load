@@ -528,6 +528,7 @@ func (s *Service) mapCredentialItem(
 	if err != nil {
 		return CredentialItemResponse{}, err
 	}
+	s.applyCredentialLiveUsage(&item)
 	item.Name = row.Name
 	item.ConnectionType = string(normalizeGroupConnectionType(group.ConnectionType))
 	item.SecretVersion = row.SecretVersion

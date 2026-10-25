@@ -57,6 +57,41 @@ func TestCredentialLimiterAvailableDoesNotCharge(t *testing.T) {
 	}
 }
 
+func TestCredentialLimiterUsageReportsWindowAndInFlight(t *testing.T) {
+	base := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
+	clock := &fakeClock{now: base}
+	limiter := NewCredentialLimiter()
+	limiter.now = clock.current
+
+	if rpmUsed, inFlight := limiter.Usage(7); rpmUsed != 0 || inFlight != 0 {
+		t.Fatalf("idle usage = %d/%d, want 0/0", rpmUsed, inFlight)
+	}
+	release, ok := limiter.Acquire(7, 3, 2)
+	if !ok {
+		t.Fatal("acquire rejected")
+	}
+	if _, ok := limiter.Acquire(7, 3, 2); !ok {
+		t.Fatal("second acquire rejected")
+	}
+	if rpmUsed, inFlight := limiter.Usage(7); rpmUsed != 2 || inFlight != 2 {
+		t.Fatalf("active usage = %d/%d, want 2/2", rpmUsed, inFlight)
+	}
+	release()
+	if rpmUsed, inFlight := limiter.Usage(7); rpmUsed != 2 || inFlight != 1 {
+		t.Fatalf("usage after release = %d/%d, want 2/1", rpmUsed, inFlight)
+	}
+	if _, ok := limiter.Acquire(8, 0, 0); !ok {
+		t.Fatal("unlimited acquire rejected")
+	}
+	if rpmUsed, inFlight := limiter.Usage(8); rpmUsed != 0 || inFlight != 0 {
+		t.Fatalf("unlimited usage = %d/%d, want 0/0", rpmUsed, inFlight)
+	}
+	clock.set(base.Add(time.Minute))
+	if rpmUsed, inFlight := limiter.Usage(7); rpmUsed != 0 || inFlight != 1 {
+		t.Fatalf("expired window usage = %d/%d, want 0/1", rpmUsed, inFlight)
+	}
+}
+
 func TestCredentialLimiterUnlimitedIsNoop(t *testing.T) {
 	limiter := NewCredentialLimiter()
 	for range 3 {

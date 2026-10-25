@@ -61,6 +61,7 @@ type Service struct {
 	credentialActivity                credentialActivityReader
 	homeStatistics                    HomeStatisticsReader
 	stats                             *health.StatsStore
+	limitUsage                        credentialLimitUsage
 	mutations                         credentialMutationCoordinator
 	requestLogStats                   RequestLogStatsReader
 	accessQuota                       *accessquota.Runtime

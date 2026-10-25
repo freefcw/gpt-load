@@ -351,6 +351,7 @@ func (s *Service) mapHomeSubscriptionAccount(
 	if err != nil {
 		return HomeSubscriptionAccountResponse{}, err
 	}
+	s.applyCredentialLiveUsage(&item)
 	item.Name = credential.Name
 	item.ConnectionType = string(models.ConnectionTypeSubscription)
 	item.SecretVersion = credential.SecretVersion

@@ -25,6 +25,7 @@ import AppTooltip from '@/components/ui/AppTooltip.vue'
 import CopyChip from '@/components/ui/CopyChip.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
+import LimitUsageMeter from '@/components/ui/LimitUsageMeter.vue'
 import ModelCooldownDetails from '@/components/ui/ModelCooldownDetails.vue'
 import { formatLocalInstant } from '@/lib/format'
 
@@ -223,6 +224,21 @@ function runMenuAction(action: 'test' | 'toggle' | 'restore' | 'remove'): void {
             {{ weightLabel }}
           </button>
         </AppTooltip>
+        <!-- 限额与权重同属调度信息，折叠态直接可见，不必展开。 -->
+        <div class="group-credential-record__usage">
+          <LimitUsageMeter
+            :label="t('group.credentials.limits.rpmShort')"
+            :used="item.rpm_used"
+            :limit="item.effective_rpm_limit"
+            compact
+          />
+          <LimitUsageMeter
+            :label="t('group.credentials.limits.concurrencyShort')"
+            :used="item.concurrency_used"
+            :limit="item.effective_concurrency_limit"
+            compact
+          />
+        </div>
       </div>
 
       <div class="ledger-record-list__cell group-credential-record__recent" role="cell">
@@ -512,6 +528,14 @@ function runMenuAction(action: 'test' | 'toggle' | 'restore' | 'remove'): void {
   color: var(--color-text-faint);
   text-decoration: underline dotted;
   text-underline-offset: 3px;
+}
+
+/* 权重值下方紧跟两条限额用量，共用调度列的窄宽度。 */
+.group-credential-record__usage {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  margin-top: 4px;
 }
 
 .group-credential-record__actions {

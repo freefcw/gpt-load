@@ -453,6 +453,8 @@ export default {
       limits: {
         rpm: 'Requests per minute',
         concurrency: 'Concurrency',
+        rpmShort: 'RPM',
+        concurrencyShort: 'Concurrent',
         inherited: 'Group default',
         unlimited: 'No limit',
         hint: 'Leave empty to use the Group default. A value here overrides it for this credential only.',

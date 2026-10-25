@@ -435,6 +435,8 @@ export default {
       limits: {
         rpm: '每分钟请求上限',
         concurrency: '并发上限',
+        rpmShort: 'RPM',
+        concurrencyShort: '并发',
         inherited: '继承分组',
         unlimited: '不限',
         hint: '留空或填 0 都继承分组默认值。分组本身不限时，继承即不限。',

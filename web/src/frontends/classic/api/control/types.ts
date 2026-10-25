@@ -320,6 +320,8 @@ export interface CredentialItemDto {
   effective_concurrency_limit: number
   group_rpm_limit: number
   group_concurrency_limit: number
+  rpm_used: number
+  concurrency_used: number
   recent_success_count: number
   recent_failure_count: number
   consecutive_failure_count: number

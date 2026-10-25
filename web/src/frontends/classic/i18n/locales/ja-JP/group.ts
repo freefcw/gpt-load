@@ -454,6 +454,8 @@ export default {
       limits: {
         rpm: '1分あたりのリクエスト上限',
         concurrency: '同時実行上限',
+        rpmShort: 'RPM',
+        concurrencyShort: '同時',
         inherited: 'グループ既定',
         unlimited: '無制限',
         hint: '空欄ではグループの既定値を使います。入力するとこの認証情報だけ上書きします。',

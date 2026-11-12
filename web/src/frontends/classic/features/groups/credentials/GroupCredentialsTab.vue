@@ -1158,7 +1158,12 @@ async function confirmResetCredit(): Promise<void> {
     resetTarget.value = undefined
   } catch (cause) {
     if (cause instanceof ApiError && cause.code !== 'RESET_CREDIT_OUTCOME_UNKNOWN') {
-      resetOperationKeys.delete(target.item.credential_id)
+      // 弹窗仍开着，只换 map 里的键会让下一次确认重放旧的拒绝结果。
+      const nextKey = createUUID()
+      resetOperationKeys.set(target.item.credential_id, nextKey)
+      if (resetTarget.value?.item.credential_id === target.item.credential_id) {
+        resetTarget.value = { item: resetTarget.value.item, idempotencyKey: nextKey }
+      }
     }
     // 确认弹窗仍打开，错误必须显示在弹窗内，否则会被遮罩挡住。
     resetFeedback.value = t(

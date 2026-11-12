@@ -64,6 +64,9 @@ func (s *Service) DownloadGroupCredential(
 	if err != nil {
 		return CredentialDownloadResult{}, err
 	}
+	if credential.StartupQuarantined() {
+		return CredentialDownloadResult{}, app_errors.ErrCredentialReauthorizationRequired
+	}
 	canonical, email, err := s.decodeCredential(group, credential)
 	if err != nil {
 		return CredentialDownloadResult{}, err
@@ -107,15 +110,15 @@ func (s *Service) DownloadAllGroupCredentials(
 		return CredentialDownloadAllResult{}, app_errors.ParseDBError(err)
 	}
 	apiKeyGroup := normalizeGroupConnectionType(group.ConnectionType) == models.ConnectionTypeAPIKey
-	fileCount := len(rows)
-	if apiKeyGroup {
-		fileCount = 1
-	}
-	files := make([]CredentialDownloadResult, 0, fileCount)
+	files := make([]CredentialDownloadResult, 0, len(rows))
 	var content strings.Builder
+	exported := 0
 	for _, row := range rows {
 		if err := ctx.Err(); err != nil {
 			return CredentialDownloadAllResult{}, err
+		}
+		if row.StartupQuarantined() {
+			continue
 		}
 		canonical, email, err := s.decodeCredential(group, row)
 		if err != nil {
@@ -131,21 +134,23 @@ func (s *Service) DownloadAllGroupCredentials(
 			}
 			content.WriteString(line)
 			content.WriteByte('\n')
+			exported++
 			continue
 		}
 		files = append(files, CredentialDownloadResult{
 			Filename:   subscriptionCredentialFilename(group.ChannelID, email, row.ID),
 			Credential: json.RawMessage(append([]byte(nil), canonical...)),
 		})
+		exported++
 	}
-	if apiKeyGroup {
+	if apiKeyGroup && exported > 0 {
 		text := content.String()
 		files = append(files, CredentialDownloadResult{
 			Filename: fmt.Sprintf("%s-group-%d.txt", sanitizeCredentialFilenamePart(group.ChannelID), group.ID),
 			Content:  &text,
 		})
 	}
-	return CredentialDownloadAllResult{Files: files, CredentialCount: len(rows)}, nil
+	return CredentialDownloadAllResult{Files: files, CredentialCount: exported}, nil
 }
 
 // credentialTextLine 保持普通 Key 一行一个，结构化凭据保留完整 JSON 以便重新导入。

@@ -392,6 +392,11 @@ func normalizeRuntimeCredentialAuthState(value models.CredentialAuthState) state
 }
 
 func (s *Service) decodeCredential(group models.Group, row models.Credential) (json.RawMessage, string, error) {
+	// 启动隔离的密文和指纹都不可信。展示走 decodeCredentialForDisplay，
+	// 任何会解密、导出或拿去请求上游的路径都停在这里。
+	if row.StartupQuarantined() {
+		return nil, "", app_errors.ErrCredentialReauthorizationRequired
+	}
 	plaintext, err := s.encryption.Decrypt(row.Data)
 	if err != nil {
 		return nil, "", fmt.Errorf("decrypt credential %d: %w", row.ID, app_errors.ErrInternalServer)

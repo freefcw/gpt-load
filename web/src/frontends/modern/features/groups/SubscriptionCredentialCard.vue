@@ -25,7 +25,7 @@ import CredentialOutcomeSummary from './CredentialOutcomeSummary.vue'
 import CredentialQuotaRows from './CredentialQuotaRows.vue'
 import CredentialPlanBadge from './CredentialPlanBadge.vue'
 import CredentialLiveUsage from './CredentialLiveUsage.vue'
-import { credentialStatus, credentialTime } from './credential-presentation'
+import { credentialStatus, credentialTime, startupAuthMessageKey } from './credential-presentation'
 
 const props = defineProps<{
   row: CredentialRow
@@ -46,6 +46,10 @@ defineEmits<{
 }>()
 const { t, n, locale } = useI18n()
 const state = computed(() => credentialStatus(props.row))
+const startupIssue = computed(() => {
+  const key = startupAuthMessageKey(props.row.authError)
+  return key ? t(key) : ''
+})
 const rpmLabel = computed(() =>
   props.row.rpmPeakHour === undefined
     ? t('rpm.loadFailed')
@@ -249,6 +253,7 @@ useLoadingActivity(() => Boolean(props.pending))
       <div
         v-if="
           error ||
+          startupIssue ||
           (observation?.windows.length && observation.state !== 'fresh') ||
           row.modelCooldowns.length ||
           row.cooldownUntil ||
@@ -256,6 +261,9 @@ useLoadingActivity(() => Boolean(props.pending))
         "
         class="modern-subscription-card-notices"
       >
+        <span v-if="startupIssue" class="modern-subscription-card-error" role="alert">{{
+          startupIssue
+        }}</span>
         <span v-if="error" class="modern-subscription-card-error" role="alert">{{ error }}</span>
         <span v-else-if="observation?.windows.length && observation.state !== 'fresh'">{{
           t('credentialCards.observation.' + observation.state)

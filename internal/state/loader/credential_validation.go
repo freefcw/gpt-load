@@ -90,7 +90,7 @@ func (l *Loader) validatePersistedCredentials(ctx context.Context, input state.C
 		for _, issue := range issues {
 			entry := entries[issue.index]
 			result := tx.Model(&models.Credential{}).
-				Where("id = ? AND group_id = ? AND secret_version = ? AND fingerprint = ?", entry.ID, entry.GroupID, entry.Version, entry.Fingerprint).
+				Where("id = ? AND group_id = ? AND secret_version = ? AND fingerprint = ? AND NOT (auth_state = ? AND auth_error_code = ?)", entry.ID, entry.GroupID, entry.Version, entry.Fingerprint, models.CredentialAuthStateReauthorizationRequired, issue.code).
 				Updates(map[string]any{"auth_state": models.CredentialAuthStateReauthorizationRequired, "auth_error_code": issue.code, "updated_at_ms": time.Now().UnixMilli()})
 			if result.Error != nil {
 				return fmt.Errorf("quarantine credential %d: update failed", entry.ID)

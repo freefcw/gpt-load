@@ -178,6 +178,10 @@ func (s *Service) prepareStoredSubscriptionCredentialInternal(
 	forceRefresh bool,
 	allowRecovery bool,
 ) (subscriptionruntime.Credential, error) {
+	// 启动隔离不能靠手动刷新恢复：密文或指纹未经验证，allowRecovery 不得放行。
+	if row.StartupQuarantined() {
+		return subscriptionruntime.Credential{}, app_errors.ErrCredentialReauthorizationRequired
+	}
 	if _, frozen := subscriptionruntime.NetworkFromContext(ctx); !frozen {
 		network, err := s.credentialNetworkContext(ctx, s.db, group, row)
 		if err != nil {

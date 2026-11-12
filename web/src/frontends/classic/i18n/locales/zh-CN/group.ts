@@ -401,6 +401,19 @@ export default {
         until: '恢复时间',
       },
       title: '密钥',
+      authState: {
+        refreshing: '正在刷新凭据',
+        reauthorization_required: '凭据需要重新导入',
+        outcome_unknown: '无法确认凭据刷新结果',
+      },
+      authError: {
+        startupDecryptFailed:
+          '此凭据无法在本地解密，已隔离，不影响其他密钥。请重新导入有效凭据；原有记录已保留。',
+        startupShapeInvalid:
+          '此凭据未通过本地格式校验，已隔离，不影响其他密钥。请重新导入有效凭据；原有记录已保留。',
+        startupFingerprintMismatch:
+          '此凭据指纹与已保存的密钥不一致，已隔离，不影响其他密钥。请重新导入有效凭据；原有记录已保留。',
+      },
       description: '查看状态、调度权重和最近结果',
       add: '添加密钥',
       summary: { region: '凭据状态概览', current: '当前凭据' },

@@ -94,6 +94,12 @@ export const zhCN = {
   resetPreparationFailed: '重置准备失败，尚未使用重置卡，请稍后重试',
   resetNotNeeded: '当前额度未用尽，无需重置，未使用重置卡。',
   resetUnavailable: '当前没有可用的重置卡，请先同步账号信息。',
+  startupDecryptFailed:
+    '此凭据无法在本地解密，已隔离，不影响其他账号。请重新导入有效凭据；原有记录已保留。',
+  startupShapeInvalid:
+    '此凭据未通过本地格式校验，已隔离，不影响其他账号。请重新导入有效凭据；原有记录已保留。',
+  startupFingerprintMismatch:
+    '此凭据指纹与已保存的密钥不一致，已隔离，不影响其他账号。请重新导入有效凭据；原有记录已保留。',
   actionFailed: '操作失败，请稍后重试。',
   lastFailure: '最近失败原因',
   recovery: '恢复方式',
@@ -265,6 +271,12 @@ export const enUS: typeof zhCN = {
     'Reset preparation failed; no reset credit was consumed. Please try again later',
   resetNotNeeded: 'Usage does not need a reset right now; no reset credit was used.',
   resetUnavailable: 'No reset credit is available. Sync the account and try again.',
+  startupDecryptFailed:
+    'This credential could not be decrypted locally and was isolated. Other accounts stay available. Re-import a valid credential; the stored record is kept.',
+  startupShapeInvalid:
+    'This credential failed local validation and was isolated. Other accounts stay available. Re-import a valid credential; the stored record is kept.',
+  startupFingerprintMismatch:
+    'This credential fingerprint does not match its stored secret and was isolated. Other accounts stay available. Re-import a valid credential; the stored record is kept.',
   actionFailed: 'Action failed. Please retry.',
   lastFailure: 'Last failure',
   recovery: 'Recovery',
@@ -442,6 +454,12 @@ export const jaJP: typeof zhCN = {
   resetNotNeeded: '現在の使用量はリセット不要です。リセットカードは使用されていません。',
   resetUnavailable:
     '利用できるリセットカードがありません。アカウントを同期してから再試行してください。',
+  startupDecryptFailed:
+    'この認証情報はローカルで復号できないため隔離されています。他のアカウントには影響しません。有効な認証情報を再インポートしてください。保存済みレコードは保持されています。',
+  startupShapeInvalid:
+    'この認証情報はローカル検証に失敗したため隔離されています。他のアカウントには影響しません。有効な認証情報を再インポートしてください。保存済みレコードは保持されています。',
+  startupFingerprintMismatch:
+    'この認証情報のフィンガープリントが保存済みシークレットと一致しないため隔離されています。他のアカウントには影響しません。有効な認証情報を再インポートしてください。保存済みレコードは保持されています。',
   actionFailed: '操作に失敗しました。再試行してください。',
   lastFailure: '最終失敗の原因',
   recovery: '復旧方法',

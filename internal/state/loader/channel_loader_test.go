@@ -72,9 +72,20 @@ func TestValidatedLoaderQuarantinesInvalidCredentialsBeforePublishing(t *testing
 			if !saved.StartupQuarantined() || saved.AuthErrorCode != test.errorCode || saved.Data != row.Data || saved.Fingerprint != row.Fingerprint || saved.SecretVersion != row.SecretVersion {
 				t.Fatal("startup quarantine rewrote a secret or failed to persist its auth gate")
 			}
+			// 已经是同一隔离码时，再次启动不能改 updated_at_ms。
+			if err := db.Model(&models.Credential{}).Where("id = ?", row.ID).UpdateColumn("updated_at_ms", int64(42)).Error; err != nil {
+				t.Fatal(err)
+			}
 			// A second load must preserve the same gate rather than crash or re-enable it.
 			if err := loader.NewWithCredentialValidation(db, manager, registry, channels, subscriptions, validator).Load(t.Context()); err != nil {
 				t.Fatal(err)
+			}
+			var again models.Credential
+			if err := db.First(&again, row.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if again.UpdatedAtMS != 42 || !again.StartupQuarantined() || again.AuthErrorCode != test.errorCode {
+				t.Fatal("restart rewrote updated_at_ms or the quarantine gate")
 			}
 			if candidates := registry.CollectCredentialCandidates([]uint{group.ID}, nil, time.Now()); len(candidates) != 0 {
 				t.Fatal("restart re-enabled quarantined credentials")

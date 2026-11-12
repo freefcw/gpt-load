@@ -25,6 +25,20 @@ type ModernCredentialOption struct {
 	GroupIDs       []uint   `json:"group_ids"`
 }
 
+// credentialFilterKeyForDisplay 给启动隔离的行一个不解析密文的稳定归并键。
+// 键带 stored 前缀，避免和已解析身份的健康账号撞车。
+func (s *Service) credentialFilterKeyForDisplay(group models.Group, row models.Credential, canonical json.RawMessage) (string, error) {
+	if row.StartupQuarantined() {
+		identity := strings.TrimSpace(row.IdentityFingerprint)
+		if identity == "" || s == nil || s.encryption == nil {
+			return "", app_errors.ErrInternalServer
+		}
+		connectionType := normalizeGroupConnectionType(group.ConnectionType)
+		return s.encryption.Hash("credential-filter/v1|" + group.ChannelID + "|" + string(connectionType) + "|stored|" + identity), nil
+	}
+	return s.credentialFilterKey(group, row, canonical)
+}
+
 func (s *Service) credentialFilterKey(group models.Group, row models.Credential, canonical json.RawMessage) (string, error) {
 	connectionType := normalizeGroupConnectionType(group.ConnectionType)
 	identity := row.Fingerprint

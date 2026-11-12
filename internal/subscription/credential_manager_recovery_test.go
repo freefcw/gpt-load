@@ -308,6 +308,41 @@ func TestCredentialManagerManualRecoveryReportsCurrentFailureNotStoredCode(t *te
 	}
 }
 
+func TestCredentialManagerManualRecoveryRefusesStartupQuarantine(t *testing.T) {
+	for _, code := range []string{
+		models.CredentialStartupDecryptFailed,
+		models.CredentialStartupShapeInvalid,
+		models.CredentialStartupFingerprintMismatch,
+	} {
+		t.Run(code, func(t *testing.T) {
+			manager, db, registry, keyService, row := newCredentialManagerFixture(t, credentialJSON("old-access", "old-refresh", time.Now().Add(time.Hour)))
+			beforeData, beforeFingerprint := row.Data, row.Fingerprint
+			markCredentialAuthState(t, db, registry, row.ID, models.CredentialAuthStateReauthorizationRequired, code)
+			manager.refresh = adaptCodexRefresh(func(context.Context, codex.Credential) (codex.Credential, error) {
+				t.Fatal("startup quarantine must not call the token endpoint")
+				return codex.Credential{}, nil
+			})
+
+			_, evidence := manager.RefreshForManualRecovery(t.Context(), channel.Codex, credentialSnapshot(t, row, keyService))
+			if evidence == nil || evidence.Code != "reauthorization_required" {
+				t.Fatalf("evidence = %#v", evidence)
+			}
+			assertStoredAuthState(t, db, row.ID, models.CredentialAuthStateReauthorizationRequired, code)
+			var stored models.Credential
+			if err := db.First(&stored, row.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if stored.Data != beforeData || stored.Fingerprint != beforeFingerprint || stored.SecretVersion != row.SecretVersion {
+				t.Fatal("startup quarantine refresh rewrote the stored credential")
+			}
+			auth, ok := registry.CredentialAuthStateOf(row.ID)
+			if !ok || auth != state.CredentialAuthStateReauthorizationRequired {
+				t.Fatalf("registry auth = %q ok=%t", auth, ok)
+			}
+		})
+	}
+}
+
 func markCredentialAuthState(
 	t *testing.T,
 	db *gorm.DB,

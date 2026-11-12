@@ -139,7 +139,7 @@ func (s *Service) proxyReferences(ctx context.Context, db *gorm.DB, labels ...bo
 		group := byID[credential.GroupID]
 		label := ""
 		if len(labels) > 0 && labels[0] {
-			canonical, identity, err := s.decodeCredential(group, credential)
+			canonical, identity, err := s.decodeCredentialForDisplay(group, credential)
 			if err != nil {
 				return nil, err
 			}
@@ -149,7 +149,8 @@ func (s *Service) proxyReferences(ctx context.Context, db *gorm.DB, labels ...bo
 			}
 			if group.ConnectionType == models.ConnectionTypeSubscription {
 				label = account.EmailMask
-			} else {
+			}
+			if label == "" {
 				label = mask
 			}
 		}

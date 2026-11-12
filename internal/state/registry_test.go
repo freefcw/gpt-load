@@ -1338,6 +1338,26 @@ func intPointer(value int) *int {
 	return &value
 }
 
+func TestBlacklistedCredentialsSkipsNonReady(t *testing.T) {
+	registry := NewCredentialRegistry()
+	mustReplaceKeyEntries(t, registry, []CredentialEntry{
+		{
+			ID: 1, GroupID: 10, Status: CredentialStatusActive,
+			AuthState: CredentialAuthStateReauthorizationRequired, Blacklisted: true,
+			Version: 1, IdentityGeneration: 1, Fingerprint: "quarantined", EncryptedValue: "cipher",
+		},
+		{
+			ID: 2, GroupID: 10, Status: CredentialStatusActive,
+			AuthState: CredentialAuthStateReady, Blacklisted: true,
+			Version: 1, IdentityGeneration: 2, Fingerprint: "ready", EncryptedValue: "cipher",
+		},
+	})
+	got := registry.BlacklistedCredentials()
+	if len(got) != 1 || got[0].ID != 2 {
+		t.Fatalf("BlacklistedCredentials() = %#v, want only the ready credential", got)
+	}
+}
+
 func mustReplaceKeyEntries(t *testing.T, registry *CredentialRegistry, entries []CredentialEntry) {
 	t.Helper()
 	if err := registry.ReplaceCredentials(entries); err != nil {

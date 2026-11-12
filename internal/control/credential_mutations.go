@@ -138,12 +138,15 @@ func (s *Service) RevealGroupCredential(
 		return CredentialRevealResult{}, app_errors.ErrForbidden
 	}
 	var row models.Credential
-	if err := s.db.WithContext(ctx).Select("id", "group_id", "data", "fingerprint", "identity_fingerprint", "secret_version", "auth_state", "status", "weight_manual", "updated_at_ms").
+	if err := s.db.WithContext(ctx).Select("id", "group_id", "data", "fingerprint", "identity_fingerprint", "secret_version", "auth_state", "auth_error_code", "status", "weight_manual", "updated_at_ms").
 		Where("id = ? AND group_id = ?", credentialID, groupID).Take(&row).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return CredentialRevealResult{}, credentialNotFoundError()
 		}
 		return CredentialRevealResult{}, app_errors.ParseDBError(err)
+	}
+	if row.StartupQuarantined() {
+		return CredentialRevealResult{}, app_errors.ErrCredentialReauthorizationRequired
 	}
 	credential, _, err := s.decodeCredential(group, row)
 	if err != nil {

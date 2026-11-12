@@ -418,6 +418,19 @@ export default {
         until: 'Available after',
       },
       title: 'Keys',
+      authState: {
+        refreshing: 'Refreshing credential',
+        reauthorization_required: 'Credential needs to be imported again',
+        outcome_unknown: 'Credential refresh outcome is unknown',
+      },
+      authError: {
+        startupDecryptFailed:
+          'This credential could not be decrypted locally and was isolated. Other keys stay available. Re-import a valid credential; the stored record is kept.',
+        startupShapeInvalid:
+          'This credential failed local validation and was isolated. Other keys stay available. Re-import a valid credential; the stored record is kept.',
+        startupFingerprintMismatch:
+          'This credential fingerprint does not match its stored secret and was isolated. Other keys stay available. Re-import a valid credential; the stored record is kept.',
+      },
       description: 'Review status, scheduling weight, and recent results',
       add: 'Add key',
       summary: { region: 'Credential status overview', current: 'Current credentials' },

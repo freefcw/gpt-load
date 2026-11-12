@@ -19,7 +19,7 @@ func (manager *RuntimeManager) ValidateRouteCapability(
 		return fmt.Errorf("runtime manager is unavailable")
 	}
 	if _, sdkBacked := sdkProviderSpecFor(providerKind); !sdkBacked &&
-		providerKind != channel.ProviderOpenAICompatible && providerKind != channel.ProviderMultiProtocolGateway &&
+		!openAICompatibleBase(providerKind) && providerKind != channel.ProviderMultiProtocolGateway &&
 		providerKind != channel.ProviderJev && providerKind != channel.ProviderCline {
 		return fmt.Errorf("provider is not implemented by Bifrost")
 	}
@@ -40,7 +40,8 @@ func convertedRouteImplemented(providerKind channel.ProviderKind, clientProtocol
 	case execution.OperationImagesGenerate:
 		return providerKind == channel.ProviderGemini && clientProtocol == protocol.OpenAIImages
 	case execution.OperationEmbeddingsCreate:
-		return providerKind == channel.ProviderGemini && clientProtocol == protocol.OpenAIEmbeddings
+		return (providerKind == channel.ProviderGemini || providerKind == channel.ProviderGoogleVertex) &&
+			clientProtocol == protocol.OpenAIEmbeddings
 	case execution.OperationListModels:
 		return clientProtocol != protocol.OpenAIResponses && clientProtocol != protocol.Rerank &&
 			clientProtocol != protocol.Decisions && clientProtocol.Valid()
@@ -133,7 +134,7 @@ func nativeRouteImplemented(
 			return operation == execution.OperationImagesGenerate || operation == execution.OperationImagesEdit
 		}
 		return clientProtocol == protocol.OpenAICompletions && standardProtocolOperation(clientProtocol, operation)
-	case channel.ProviderDeepSeek:
+	case channel.ProviderDeepSeek, channel.ProviderAlibaba:
 		switch clientProtocol {
 		case protocol.OpenAICompletions, protocol.OpenAIResponses:
 			return standardProtocolOperation(clientProtocol, operation)
@@ -155,6 +156,9 @@ func nativeRouteImplemented(
 	case channel.ProviderGroq:
 		return clientProtocol == protocol.OpenAICompletions && standardProtocolOperation(clientProtocol, operation)
 	case channel.ProviderGoogleVertex:
+		if clientProtocol == protocol.GeminiEmbeddings {
+			return operation == execution.OperationEmbeddingsCreate || operation == execution.OperationProbe
+		}
 		return clientProtocol == protocol.Gemini &&
 			(operation == execution.OperationChatCompletion || operation == execution.OperationProbe)
 	default:

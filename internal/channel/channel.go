@@ -251,6 +251,7 @@ const (
 	ProviderJev                  = spec.ProviderJev
 	ProviderGroq                 = spec.ProviderGroq
 	ProviderXAI                  = spec.ProviderXAI
+	ProviderAlibaba              = spec.ProviderAlibaba
 )
 
 // ResolvedTarget is the provider-neutral execution target derived from a channel preset.
@@ -348,6 +349,11 @@ func (t ResolvedTarget) PreferredProtocol(
 // Gemma, or numeric custom endpoint that can preserve the native Gemini wire format.
 func NormalizeVertexGeminiModel(model string) (string, bool) {
 	return modules.NormalizeVertexGeminiModel(model)
+}
+
+// NormalizeVertexEmbeddingsModel 归一化 Vertex 向量操作支持的 publisher 模型名。
+func NormalizeVertexEmbeddingsModel(model string) (string, bool) {
+	return modules.NormalizeVertexEmbeddingsModel(model)
 }
 
 // Operations returns the stable operation set declared for a client protocol.

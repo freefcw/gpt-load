@@ -111,6 +111,18 @@ const recoveryLabel = computed(() => {
     })
   return t(`group.credentials.recovery.${props.item.recovery.mode}`)
 })
+const startupAuthKeys: Readonly<Record<string, string>> = {
+  startup_decrypt_failed: 'group.credentials.authError.startupDecryptFailed',
+  startup_shape_invalid: 'group.credentials.authError.startupShapeInvalid',
+  startup_fingerprint_mismatch: 'group.credentials.authError.startupFingerprintMismatch',
+}
+const authIssue = computed(() => {
+  const state = props.item.auth_state
+  if (!state || state === 'ready') return ''
+  const code = props.item.auth_error_code
+  if (code && startupAuthKeys[code]) return t(startupAuthKeys[code])
+  return t(`group.credentials.authState.${state}`)
+})
 const failureLabel = computed(() =>
   props.item.last_status_code === null && props.item.last_failure_category === 'ambiguous'
     ? t('group.credentials.none')
@@ -207,6 +219,7 @@ function runMenuAction(action: 'test' | 'toggle' | 'restore' | 'remove'): void {
             t('group.credentials.modelCooldown.count', { count: n(item.model_cooldowns.length) })
           }}</StatusBadge>
         </div>
+        <p v-if="authIssue" class="group-credential-record__auth">{{ authIssue }}</p>
       </div>
 
       <div class="ledger-record-list__cell group-credential-record__weight" role="cell">
@@ -696,6 +709,13 @@ function runMenuAction(action: 'test' | 'toggle' | 'restore' | 'remove'): void {
 .group-credential-record__menu button svg {
   flex: none;
   color: var(--color-text-faint);
+}
+
+.group-credential-record__auth {
+  margin: 4px 0 0;
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .group-credential-record__menu button:hover:not(:disabled) {

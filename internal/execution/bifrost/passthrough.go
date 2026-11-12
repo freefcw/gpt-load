@@ -31,8 +31,18 @@ type passthroughStreamSDKResult struct {
 
 // nativeMessageProvider 为缺少透传接口的渠道复用相同 wire 协议，保留原有渠道身份。
 func nativeMessageProvider(providerKind channel.ProviderKind, spec execution.AttemptSpec) (schemas.ModelProvider, bool) {
-	if spec.RouteMode != execution.RouteNative ||
-		(spec.Operation != execution.OperationChatCompletion && spec.Operation != execution.OperationResponsesCreate) {
+	if spec.RouteMode != execution.RouteNative {
+		return "", false
+	}
+	if providerKind == channel.ProviderAlibaba {
+		// 百炼 Anthropic 端点不在 OpenAI 兼容前缀下，凭据测试也要走同一端点。
+		if spec.ClientProtocol == protocol.Anthropic &&
+			(spec.Operation == execution.OperationChatCompletion || spec.Operation == execution.OperationProbe) {
+			return schemas.Anthropic, true
+		}
+		return "", false
+	}
+	if spec.Operation != execution.OperationChatCompletion && spec.Operation != execution.OperationResponsesCreate {
 		return "", false
 	}
 	switch providerKind {
@@ -205,10 +215,18 @@ func sanitizeNativePassthroughRequest(
 		return bytes.Clone(request.Body), request.Header.Clone(), nil
 	}
 	if spec.ClientProtocol == protocol.GeminiEmbeddings && spec.Operation == execution.OperationEmbeddingsCreate {
+		model := spec.UpstreamModel
+		if spec.ChannelID == string(channel.GoogleVertex) {
+			var ok bool
+			model, ok = channel.NormalizeVertexEmbeddingsModel(model)
+			if !ok {
+				return nil, nil, fmt.Errorf("invalid Vertex Embeddings model")
+			}
+		}
 		request, err := dialect.NewGeminiEmbeddings().SanitizeRequestForAttempt(&dialect.ParsedRequest{
 			Method: spec.Method, Path: spec.Path, RawQuery: spec.RawQuery,
 			Header: spec.Header.Clone(), Body: spec.Body,
-		}, spec.UpstreamModel)
+		}, model)
 		if err != nil {
 			return nil, nil, err
 		}

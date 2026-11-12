@@ -1080,7 +1080,8 @@ func (r *CredentialRegistry) BlacklistedCredentials() []CredentialRef {
 	refs := make([]CredentialRef, 0)
 	for _, bucket := range r.buckets {
 		for _, entry := range bucket {
-			if entry.Status != CredentialStatusActive || !entry.Blacklisted {
+			if entry.Status != CredentialStatusActive || !entry.Blacklisted ||
+				entry.AuthState.normalize() != CredentialAuthStateReady {
 				continue
 			}
 			refs = append(refs, CredentialRef{

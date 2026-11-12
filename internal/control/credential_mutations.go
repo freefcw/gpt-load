@@ -138,12 +138,15 @@ func (s *Service) RevealGroupCredential(
 		return CredentialRevealResult{}, app_errors.ErrForbidden
 	}
 	var row models.Credential
-	if err := s.db.WithContext(ctx).Select("id", "group_id", "data", "fingerprint", "identity_fingerprint", "secret_version", "auth_state", "status", "weight_manual", "updated_at_ms").
+	if err := s.db.WithContext(ctx).Select("id", "group_id", "data", "fingerprint", "identity_fingerprint", "secret_version", "auth_state", "auth_error_code", "status", "weight_manual", "updated_at_ms").
 		Where("id = ? AND group_id = ?", credentialID, groupID).Take(&row).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return CredentialRevealResult{}, credentialNotFoundError()
 		}
 		return CredentialRevealResult{}, app_errors.ParseDBError(err)
+	}
+	if row.StartupQuarantined() {
+		return CredentialRevealResult{}, app_errors.ErrCredentialReauthorizationRequired
 	}
 	credential, _, err := s.decodeCredential(group, row)
 	if err != nil {
@@ -513,7 +516,7 @@ func (s *Service) mapCredentialItem(
 	stats health.CredentialStats,
 	observedAt time.Time,
 ) (CredentialItemResponse, error) {
-	canonical, identity, err := s.decodeCredential(group, row)
+	canonical, identity, err := s.decodeCredentialForDisplay(group, row)
 	if err != nil {
 		return CredentialItemResponse{}, err
 	}
@@ -533,6 +536,7 @@ func (s *Service) mapCredentialItem(
 	item.ConnectionType = string(normalizeGroupConnectionType(group.ConnectionType))
 	item.SecretVersion = row.SecretVersion
 	item.AuthState = string(row.AuthState)
+	item.AuthErrorCode = safeInternalErrorCode(row.AuthErrorCode)
 	item.Account = account
 	proxyViews, err := s.credentialProxyViews(ctx, s.db, group, []models.Credential{row})
 	if err != nil {

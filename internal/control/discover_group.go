@@ -209,6 +209,11 @@ func (s *Service) mapGroupDiscoveryTarget(
 			}
 			canonical = credential.Canonical()
 		} else {
+			// 隔离或未就绪的密钥不能拿去探测上游，后面的健康密钥继续用。
+			if credentialRow.StartupQuarantined() ||
+				normalizeRuntimeCredentialAuthState(credentialRow.AuthState) != state.CredentialAuthStateReady {
+				continue
+			}
 			var decodeErr error
 			canonical, apiKey, decodeErr = s.decodeCredential(rows.group, credentialRow)
 			if decodeErr != nil {

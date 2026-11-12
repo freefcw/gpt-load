@@ -483,6 +483,9 @@ func (s *Service) captureCredentialProbe(
 		}
 		return state.GroupView{}, groupValidationTarget{}, credentialProbeCredential{}, app_errors.ParseDBError(err)
 	}
+	if credentialRow.StartupQuarantined() {
+		return state.GroupView{}, groupValidationTarget{}, credentialProbeCredential{}, app_errors.ErrCredentialReauthorizationRequired
+	}
 	view, exists := findRuntimeCredential(s.registry.Snapshot(), credentialID)
 	if err := validateCredentialRuntimeRow(groupRow, credentialRow, view, exists); err != nil {
 		return state.GroupView{}, groupValidationTarget{}, credentialProbeCredential{}, err

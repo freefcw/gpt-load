@@ -3,6 +3,17 @@ import type { CredentialRow } from '@modern/api/group-detail'
 import type { CredentialQuota } from '@modern/api/credential-observation'
 import type { SemanticTone } from '@modern/components/ui'
 
+const startupAuthMessageKeys: Readonly<Record<string, string>> = {
+  startup_decrypt_failed: 'credentialCards.startupDecryptFailed',
+  startup_shape_invalid: 'credentialCards.startupShapeInvalid',
+  startup_fingerprint_mismatch: 'credentialCards.startupFingerprintMismatch',
+}
+
+export function startupAuthMessageKey(code: string | undefined): string | undefined {
+  if (!code) return undefined
+  return startupAuthMessageKeys[code]
+}
+
 export function credentialStatus(row: CredentialRow): { key: string; tone: SemanticTone } {
   if (!row.enabled) return { key: 'groups.credentials.disabled', tone: 'neutral' }
   if (row.authState !== 'ready')

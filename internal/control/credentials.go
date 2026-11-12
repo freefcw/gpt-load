@@ -198,6 +198,9 @@ func (s *Service) credentialPresentation(
 	canonical json.RawMessage,
 	identity string,
 ) (string, CredentialAccountResponse, error) {
+	if row.StartupQuarantined() {
+		return fmt.Sprintf("Credential #%d", row.ID), CredentialAccountResponse{}, nil
+	}
 	if normalizeGroupConnectionType(group.ConnectionType) == models.ConnectionTypeSubscription {
 		driver, driverErr := s.subscriptionDriver(channel.ID(group.ChannelID))
 		if driverErr != nil {
@@ -389,6 +392,11 @@ func normalizeRuntimeCredentialAuthState(value models.CredentialAuthState) state
 }
 
 func (s *Service) decodeCredential(group models.Group, row models.Credential) (json.RawMessage, string, error) {
+	// 启动隔离的密文和指纹都不可信。展示走 decodeCredentialForDisplay，
+	// 任何会解密、导出或拿去请求上游的路径都停在这里。
+	if row.StartupQuarantined() {
+		return nil, "", app_errors.ErrCredentialReauthorizationRequired
+	}
 	plaintext, err := s.encryption.Decrypt(row.Data)
 	if err != nil {
 		return nil, "", fmt.Errorf("decrypt credential %d: %w", row.ID, app_errors.ErrInternalServer)
@@ -415,6 +423,15 @@ func (s *Service) decodeCredential(group models.Group, row models.Credential) (j
 	return validated.CanonicalJSON(), apiKey, nil
 }
 
+// Presentation still lists quarantined rows so an operator can reconnect or
+// replace them. Secret-reveal and mutation paths retain normal validation.
+func (s *Service) decodeCredentialForDisplay(group models.Group, row models.Credential) (json.RawMessage, string, error) {
+	if row.StartupQuarantined() {
+		return nil, "", nil
+	}
+	return s.decodeCredential(group, row)
+}
+
 func (s *Service) mapCredentialCollection(
 	ctx context.Context,
 	observation credentialObservation,
@@ -435,7 +452,7 @@ func (s *Service) mapCredentialCollection(
 		return CredentialCollectionResponse{}, err
 	}
 	for _, row := range observation.rows {
-		canonical, identity, err := s.decodeCredential(observation.group, row)
+		canonical, identity, err := s.decodeCredentialForDisplay(observation.group, row)
 		if err != nil {
 			return CredentialCollectionResponse{}, err
 		}
@@ -465,7 +482,7 @@ func (s *Service) mapCredentialCollection(
 			item.Observation = withCredentialPlan(item.Observation, account.PlanType)
 		}
 		var filterKey string
-		if query.modern != nil && query.modern.credentialKey != "" {
+		if query.modern != nil && query.modern.credentialKey != "" && !row.StartupQuarantined() {
 			filterKey, err = s.credentialFilterKey(observation.group, row, canonical)
 			if err != nil {
 				return CredentialCollectionResponse{}, err

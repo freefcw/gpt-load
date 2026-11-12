@@ -389,13 +389,17 @@ func (s *Service) persistCredentials(
 		fingerprints = append(fingerprints, candidate.fingerprint)
 	}
 	var existingRows []models.Credential
-	if err := tx.Where("group_id = ? AND fingerprint IN ?", groupID, fingerprints).
-		Find(&existingRows).Error; err != nil {
+	if err := tx.Where(
+		"group_id = ? AND (fingerprint IN ? OR identity_fingerprint IN ?)",
+		groupID, fingerprints, fingerprints,
+	).Find(&existingRows).Error; err != nil {
 		return 0, 0, app_errors.ParseDBError(err)
 	}
-	existingByFingerprint := make(map[string]struct{}, len(existingRows))
+	byFingerprint := make(map[string]models.Credential, len(existingRows))
+	byIdentity := make(map[string]models.Credential, len(existingRows))
 	for _, row := range existingRows {
-		existingByFingerprint[row.Fingerprint] = struct{}{}
+		byFingerprint[row.Fingerprint] = row
+		byIdentity[row.IdentityFingerprint] = row
 	}
 
 	nowMS, err := epochms.FromTime(s.now())
@@ -408,8 +412,49 @@ func (s *Service) persistCredentials(
 	added := 0
 	duplicated := normalized.duplicateLines
 	for _, candidate := range normalized.candidates {
-		if _, exists := existingByFingerprint[candidate.fingerprint]; exists {
-			duplicated++
+		match, matched := byFingerprint[candidate.fingerprint]
+		if !matched {
+			match, matched = byIdentity[candidate.fingerprint]
+		}
+		if matched {
+			if !credentialImportCanRepair(match) {
+				if match.Fingerprint == candidate.fingerprint {
+					duplicated++
+					continue
+				}
+				return 0, 0, app_errors.ErrDuplicateCredentialIdentity
+			}
+			ciphertext, err := s.encryption.Encrypt(string(candidate.canonical))
+			if err != nil {
+				return 0, 0, fmt.Errorf("encrypt credential: %w", err)
+			}
+			updated := tx.Model(&models.Credential{}).
+				Where(
+					"id = ? AND group_id = ? AND secret_version = ? AND auth_state = ?",
+					match.ID, groupID, match.SecretVersion, models.CredentialAuthStateReauthorizationRequired,
+				).
+				Updates(map[string]any{
+					"data": ciphertext, "fingerprint": candidate.fingerprint,
+					"identity_fingerprint": candidate.fingerprint,
+					"secret_version":       match.SecretVersion + 1,
+					"auth_state":           models.CredentialAuthStateReady,
+					"auth_error_code":      "",
+					"updated_at_ms":        nowMS,
+				})
+			if updated.Error != nil {
+				return 0, 0, app_errors.ParseDBError(updated.Error)
+			}
+			if updated.RowsAffected != 1 {
+				return 0, 0, app_errors.ErrCredentialVersionConflict
+			}
+			match.Fingerprint = candidate.fingerprint
+			match.IdentityFingerprint = candidate.fingerprint
+			match.SecretVersion++
+			match.AuthState = models.CredentialAuthStateReady
+			match.AuthErrorCode = ""
+			byFingerprint[candidate.fingerprint] = match
+			byIdentity[candidate.fingerprint] = match
+			added++
 			continue
 		}
 		ciphertext, err := s.encryption.Encrypt(string(candidate.canonical))
@@ -425,10 +470,15 @@ func (s *Service) persistCredentials(
 		if err := tx.Create(&row).Error; err != nil {
 			return 0, 0, app_errors.ParseDBError(err)
 		}
-		existingByFingerprint[candidate.fingerprint] = struct{}{}
+		byFingerprint[candidate.fingerprint] = row
+		byIdentity[candidate.fingerprint] = row
 		added++
 	}
 	return added, duplicated, nil
+}
+
+func credentialImportCanRepair(row models.Credential) bool {
+	return row.AuthState == models.CredentialAuthStateReauthorizationRequired
 }
 
 func isLiteralPrivateHost(hostname string) bool {

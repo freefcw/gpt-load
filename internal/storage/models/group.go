@@ -80,6 +80,25 @@ type Credential struct {
 	ConcurrencyLimit    int64   `gorm:"column:concurrency_limit;not null;default:0"`
 }
 
+// These bounded codes mark credentials rejected locally during startup.
+const (
+	CredentialStartupDecryptFailed       = "startup_decrypt_failed"
+	CredentialStartupShapeInvalid        = "startup_shape_invalid"
+	CredentialStartupFingerprintMismatch = "startup_fingerprint_mismatch"
+)
+
+func (credential Credential) StartupQuarantined() bool {
+	if credential.AuthState != CredentialAuthStateReauthorizationRequired {
+		return false
+	}
+	switch credential.AuthErrorCode {
+	case CredentialStartupDecryptFailed, CredentialStartupShapeInvalid, CredentialStartupFingerprintMismatch:
+		return true
+	default:
+		return false
+	}
+}
+
 type CredentialAuthState string
 
 const (

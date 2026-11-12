@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CredentialRow } from '@modern/api/group-detail'
-import { credentialTime } from './credential-presentation'
+import { credentialTime, startupAuthMessageKey } from './credential-presentation'
 
 const props = defineProps<{ row: CredentialRow }>()
 const { t, locale } = useI18n()
@@ -10,6 +10,8 @@ const fields = computed(() => {
   const row = props.row
   const observation = row.observation
   const account = observation?.account
+  const startupKey = startupAuthMessageKey(row.authError)
+  const errorText = startupKey ? t(startupKey) : row.authError || observation?.error
   return [
     ['organization', observation?.organization],
     ['seat', account?.seat],
@@ -30,7 +32,7 @@ const fields = computed(() => {
       observation?.observedAt ? credentialTime(observation.observedAt, locale.value) : undefined,
     ],
     ['lastUsed', credentialTime(row.lastUsed, locale.value)],
-    ['errorCode', row.authError || observation?.error],
+    ['errorCode', errorText],
   ].filter((field): field is [string, string] => Boolean(field[1]))
 })
 </script>

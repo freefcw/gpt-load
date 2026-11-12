@@ -179,6 +179,11 @@ func (manager *CredentialManager) refreshCredentialLocked(
 	if currentIdentityGeneration != expectedIdentityGeneration {
 		return subscriptionruntime.Credential{}, localEvidence("credential_target_mismatch", "subscription credential target does not match")
 	}
+	// 启动隔离的记录不能刷新：不解密、不请求上游、不改库、不发布为可调度。
+	// allowRecovery 只恢复上游拒绝等已验证过的授权失败。
+	if row.StartupQuarantined() {
+		return subscriptionruntime.Credential{}, authEvidence("reauthorization_required")
+	}
 	if row.AuthState != models.CredentialAuthStateReady && !allowRecovery {
 		return subscriptionruntime.Credential{}, authEvidence(string(row.AuthState))
 	}

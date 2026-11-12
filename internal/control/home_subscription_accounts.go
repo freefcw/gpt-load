@@ -158,11 +158,11 @@ func (s *Service) readHomeSubscriptionAccounts(
 			ID: credential.Group.ID, Name: credential.Group.Name,
 			Enabled: credential.Group.Enabled, WeightManual: cloneInt(credential.Group.WeightManual),
 		}
-		canonical, _, err := s.decodeCredential(*credential.Group, credential)
+		canonical, _, err := s.decodeCredentialForDisplay(*credential.Group, credential)
 		if err != nil {
 			return HomeSubscriptionAccountsResponse{}, err
 		}
-		key, err := s.credentialFilterKey(*credential.Group, credential, canonical)
+		key, err := s.credentialFilterKeyForDisplay(*credential.Group, credential, canonical)
 		if err != nil {
 			return HomeSubscriptionAccountsResponse{}, err
 		}
@@ -324,7 +324,7 @@ func (s *Service) mapHomeSubscriptionAccount(
 		}
 	}
 	group := *representative.credential.Group
-	canonical, identity, err := s.decodeCredential(group, representative.credential)
+	canonical, identity, err := s.decodeCredentialForDisplay(group, representative.credential)
 	if err != nil {
 		return HomeSubscriptionAccountResponse{}, err
 	}

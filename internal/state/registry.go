@@ -586,6 +586,9 @@ func (r *CredentialRegistry) ReplaceCredentialSecretIfMatch(
 	entry.Fingerprint = fingerprint
 	entry.EncryptedValue = encryptedValue
 	entry.AuthState = CredentialAuthStateReady
+	// Scheduling feedback can be fenced to a token version. Publish the new
+	// version under the same registry -> scheduling lock order as config edits.
+	r.scheduling.SyncCredential(runtimeView(entry))
 	return true
 }
 

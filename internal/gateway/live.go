@@ -395,7 +395,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 				decision.Retry = health.RetryNextCandidate
 			}
 			attemptIndex := recorder.recordAttempt(selection, credential.secrets, result, decision, started, handler.requestNow())
-			handler.applyGroupDecisionEffect(selection.Group, ref, refreshCooldownCredentialVersion(result, ref.Version), decision, status, decisionAt, *selection.UpstreamModelID)
+			handler.applyGroupDecisionEffect(selection.Group, ref, refreshCooldownCredentialVersion(result, ref.Version), decision, status, decisionAt, failureAvoidanceTarget(*selection.UpstreamModelID, execution.OperationLiveCall))
 			failure = reason{Status: status, Code: "codex_live_upstream_failed", Message: "Codex live upstream request failed."}
 			if status == http.StatusForbidden {
 				failure.Code = "codex_live_upstream_forbidden"
@@ -465,7 +465,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 		}
 		entryTransferred, groupTransferred = true, true
 		mediaStored, upstreamStored, stored = true, true, true
-		handler.recordCredentialSuccess(ref, handler.now())
+		handler.recordCredentialSuccess(ref, handler.now(), failureAvoidanceTarget(*selection.UpstreamModelID, execution.OperationLiveCall))
 		location := "/v1/live/" + upstream.CallID
 		if c.Request.URL.Path == "/v1/realtime/calls" {
 			location = "/v1/realtime/calls/" + upstream.CallID

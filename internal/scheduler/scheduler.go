@@ -78,6 +78,7 @@ type weightedCredential struct {
 	rpmUsed          int64
 	concurrencyLimit int64
 	rpmLimit         int64
+	failureAvoided   bool
 }
 
 // softSaturationPercent 是非粘滞请求的避让阈值，不是硬性预留配额。
@@ -103,6 +104,14 @@ type candidatePool struct {
 	// Once this pool has produced a candidate, later exhaustion in the
 	// same pool must not replace the failure reason of that attempt.
 	credentialLimitSuppressed bool
+}
+
+// selectionScope shares the route tier with failure filtering without copying
+// every group's model list into every credential candidate.
+type selectionScope struct {
+	pool  *candidatePool
+	modes []channel.RouteMode
+	at    time.Time
 }
 
 type Iterator struct {
@@ -395,7 +404,7 @@ func (iterator *Iterator) Next() (Selection, error) {
 						}
 					}
 				}
-				selected, found = iterator.selectCredential(eligible, iterator.preferredCredentialID)
+				selected, found = iterator.selectCredential(eligible, iterator.preferredCredentialID, selectionScope{pool: pool, modes: modes, at: now})
 				if !found {
 					continue
 				}
@@ -469,6 +478,28 @@ func (iterator *Iterator) selectTarget(pool *candidatePool, modes []channel.Rout
 		if iterator.targetAvailable(target, credential, modes, now) {
 			models = append(models, target.target.UpstreamModelID)
 		}
+	}
+	if credential.ID != iterator.preferredCredentialID {
+		iterator.progress.WithLock(func(ledger *state.SchedulingLedger) {
+			member := ledger.Members[credential.ID]
+			if member == nil || member.GroupID != credential.GroupID || member.IdentityGeneration != credential.IdentityGeneration {
+				return
+			}
+			current := iterator.now()
+			member.PruneFailureAvoidance(current)
+			if len(member.FailureAvoidance) == 0 {
+				return
+			}
+			fresh := models[:0]
+			for _, model := range models {
+				if !member.AvoidsFailureTarget(state.FailureAvoidanceKey{Model: model, Operation: iterator.operation}, current) {
+					fresh = append(fresh, model)
+				}
+			}
+			if len(fresh) > 0 {
+				models = fresh
+			}
+		})
 	}
 	model := models[0]
 	if iterator.query.ExternalModel != nil {

@@ -39,12 +39,16 @@ func (p SchedulingProgress) Advance(weight uint64) (SchedulingProgress, bool) {
 type SchedulingMember struct {
 	ID                 uint
 	GroupID            uint
+	Version            uint64
 	IdentityGeneration uint64
 	Progress           SchedulingProgress
 	LastSelected       uint64
 	Pending            bool
 	suspended          bool
 	cooldownUntil      time.Time
+	// FailureAvoidance belongs to this exact identity. It is process-local,
+	// never checkpointed, and discarded with the member on replacement/removal.
+	FailureAvoidance map[FailureAvoidanceKey]time.Time
 }
 
 func (m *SchedulingMember) Admit(baseline SchedulingProgress) {
@@ -60,17 +64,18 @@ type SchedulingLedger struct {
 	Members map[uint]*SchedulingMember
 	// Reservations counts selected requests still preparing to acquire a real
 	// credential slot. This process-local load is never checkpointed.
-	Reservations    map[uint]int64
-	ModelCursors    map[GroupModelKey][]string
-	Groups          map[uint]bool
-	GroupPriorities map[uint]int32
-	GroupRevision   uint64
-	GroupsKnown     bool
-	Started         bool
-	Watermark       SchedulingProgress
-	Sequence        uint64
-	LastMember      uint
-	Consecutive     uint64
+	Reservations       map[uint]int64
+	ModelCursors       map[GroupModelKey][]string
+	Groups             map[uint]bool
+	GroupPriorities    map[uint]int32
+	GroupRevision      uint64
+	GroupsKnown        bool
+	Started            bool
+	Watermark          SchedulingProgress
+	Sequence           uint64
+	LastMember         uint
+	Consecutive        uint64
+	lastFailureCleanup time.Time
 }
 
 type SchedulingState struct {
@@ -104,6 +109,7 @@ func (s *SchedulingState) syncCredentialLocked(view CredentialRuntimeView) {
 			d.LastMember, d.Consecutive = 0, 0
 		}
 	}
+	m.Version = view.Version
 	authUnavailable := view.AuthState != CredentialAuthStateReady &&
 		view.AuthState != "" && view.AuthState != CredentialAuthStateRefreshing
 	suspended := view.Status != CredentialStatusActive || view.Blacklisted || authUnavailable ||

@@ -79,6 +79,57 @@ type Decision struct {
 	QuotaCooldown bool
 }
 
+// FailureAvoidanceScope reports the scheduler feedback scope for this
+// decision. Cooldowns and group skips need no redundant soft penalty. Failure
+// accounting alone may not yet blacklist a bad credential, so explicit
+// candidate failures can still need avoidance. Model scope is a hint: the gateway must supply
+// the exact upstream model and operation before recording it.
+func (decision Decision) FailureAvoidanceScope(operation execution.Operation) execution.ErrorScope {
+	if !operation.Valid() || decision.Origin != execution.ErrorOriginUpstream ||
+		decision.Scope == execution.ErrorScopeRequest ||
+		decision.Effect == EffectCooldownCredential || decision.Effect == EffectCooldownModel ||
+		decision.Effect == EffectSkipGroup {
+		return ""
+	}
+
+	candidateScope := func() execution.ErrorScope {
+		switch decision.Scope {
+		case execution.ErrorScopeCredential:
+			return execution.ErrorScopeCredential
+		case execution.ErrorScopeModel, execution.ErrorScopeGroup, "":
+			// Missing scope on a known candidate rejection can only affect the
+			// attempted target, never the whole credential.
+			return execution.ErrorScopeModel
+		default:
+			return ""
+		}
+	}
+	switch decision.Category {
+	case FailureCategoryInvalidKey:
+		if decision.Effect == EffectRecordCredentialFailure && decision.Scope == execution.ErrorScopeCredential {
+			return execution.ErrorScopeCredential
+		}
+	case FailureCategoryAuthenticationRequired:
+		if decision.RuleID == "auth.reauthorization_required" && decision.Effect == EffectNone {
+			return candidateScope()
+		}
+	case FailureCategoryRateLimited, FailureCategoryUpstreamHostError:
+		// Capacity rejection is deliberately not a health effect. It is still
+		// attributable to this credential's attempted model and operation.
+		if decision.Effect == EffectNone && decision.RuleID == "candidate.transient_capacity" {
+			return candidateScope()
+		}
+	case FailureCategoryModelUnavailable:
+		// Resource lookups are request-scoped and must not penalize other use of
+		// the credential. Custom retry rules likewise do not imply attribution.
+		if decision.Effect == EffectNone && decision.RuleID != "model.resource_unavailable" &&
+			!strings.HasPrefix(string(decision.RuleID), "custom.") {
+			return candidateScope()
+		}
+	}
+	return ""
+}
+
 func (decision Decision) ShouldRetry() bool {
 	return decision.Retry == RetryRefreshCredential ||
 		decision.Retry == RetryNextCandidate

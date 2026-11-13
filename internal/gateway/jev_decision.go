@@ -195,7 +195,7 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 	})
 	if result.DispatchState != execution.DispatchLocal && !result.ProviderErrorBeforeCommit &&
 		result.HasResponse() && result.StatusCode >= http.StatusOK && result.StatusCode < http.StatusMultipleChoices {
-		handler.recordCredentialSuccess(ref, attemptNow)
+		handler.recordCredentialSuccess(ref, attemptNow, failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), execution.OperationDecisionsCreate))
 	}
 	handler.applyGroupDecisionEffect(
 		selection.Group,
@@ -204,7 +204,7 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 		judgment,
 		result.StatusCode,
 		attemptNow,
-		optionalModelValue(selection.UpstreamModelID),
+		failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), execution.OperationDecisionsCreate),
 	)
 
 	if decision.Called && result.HasResponse() {

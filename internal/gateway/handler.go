@@ -364,8 +364,18 @@ func (handler *Handler) applyGroupDecisionEffect(
 	decision health.Decision,
 	statusCode int,
 	attemptNow time.Time,
-	model string,
+	target state.FailureAvoidanceKey,
 ) {
+	switch decision.FailureAvoidanceScope(target.Operation) {
+	case execution.ErrorScopeCredential:
+		scheduler.AvoidFailedCredential(handler.registry.SchedulingState(), ref, credentialVersion, state.FailureAvoidanceKey{}, attemptNow)
+	case execution.ErrorScopeModel:
+		// A malformed or incomplete target must never widen model feedback to
+		// the whole credential.
+		if target.Model != "" && target.Valid() {
+			scheduler.AvoidFailedCredential(handler.registry.SchedulingState(), ref, credentialVersion, target, attemptNow)
+		}
+	}
 	handler.applyDecisionEffectWithBlacklistPolicy(
 		ref,
 		credentialVersion,
@@ -373,7 +383,7 @@ func (handler *Handler) applyGroupDecisionEffect(
 		statusCode,
 		attemptNow,
 		group.BlacklistThreshold,
-		model,
+		target.Model,
 	)
 }
 
@@ -458,7 +468,13 @@ func (handler *Handler) applyDecisionEffectWithBlacklistPolicy(
 	}
 }
 
-func (handler *Handler) recordCredentialSuccess(ref state.CredentialRef, at time.Time) {
+func (handler *Handler) recordCredentialSuccess(ref state.CredentialRef, at time.Time, target state.FailureAvoidanceKey) {
+	// Successful resource operations may have no upstream model. They can
+	// confirm account health, but cannot clear any model-specific failure.
+	if target.Model == "" && target.Operation.Valid() {
+		target = state.FailureAvoidanceKey{}
+	}
+	scheduler.ForgetCredentialFailure(handler.registry.SchedulingState(), ref, target, at)
 	handler.mutateCredentialForTarget(ref, func() {
 		if handler.registry.ClearFailure(ref.ID) {
 			handler.stats.RecordSuccess(ref.ID, at)
@@ -891,6 +907,12 @@ func optionalModelValue(value *string) string {
 	return *value
 }
 
+func failureAvoidanceTarget(model string, operation execution.Operation) state.FailureAvoidanceKey {
+	// Preserve the operation even when a resource request has no model. The
+	// health decision still needs it to distinguish account and target scope.
+	return state.FailureAvoidanceKey{Model: model, Operation: operation}
+}
+
 func retryAfterSeconds(duration time.Duration) int {
 	seconds := int((duration + time.Second - 1) / time.Second)
 	if seconds < 1 {
@@ -1207,7 +1229,7 @@ func (handler *Handler) executeAttempts(
 			selection, nil, result, decision, attemptStarted, attemptCompleted,
 		)
 		lastAttemptIndex = recordedAttempt
-		handler.applyGroupDecisionEffect(selection.Group, allowedCredentialRefs[selection.CredentialID], 0, decision, 0, attemptNow, optionalModelValue(selection.UpstreamModelID))
+		handler.applyGroupDecisionEffect(selection.Group, allowedCredentialRefs[selection.CredentialID], 0, decision, 0, attemptNow, failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), operation))
 		if decision.Effect == health.EffectSkipGroup {
 			iterator.SkipGroup(selection.GroupID)
 		}
@@ -1625,10 +1647,10 @@ func (handler *Handler) executeAttempts(
 				decision,
 				result.StatusCode,
 				attemptNow,
-				optionalModelValue(selection.UpstreamModelID),
+				failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), operation),
 			)
 			if stream && result.Stream.EndReason == StreamEndCleanEOF {
-				handler.recordCredentialSuccess(ref, attemptNow)
+				handler.recordCredentialSuccess(ref, attemptNow, failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), operation))
 				if originalMetadata.PreviousResponseID == "" {
 					handler.recordAffinitySuccess(requestAffinity, selection, ref)
 				}
@@ -1648,7 +1670,7 @@ func (handler *Handler) executeAttempts(
 				recorder.completeCanceled(ginContext.Request.Context(), 0, recordedAttempt)
 			}
 			if decision.Effect == health.EffectCooldownModel {
-				handler.applyGroupDecisionEffect(selection.Group, ref, 0, decision, result.StatusCode, attemptNow, optionalModelValue(selection.UpstreamModelID))
+				handler.applyGroupDecisionEffect(selection.Group, ref, 0, decision, result.StatusCode, attemptNow, failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), operation))
 			}
 			return
 		}
@@ -1656,7 +1678,7 @@ func (handler *Handler) executeAttempts(
 			!result.ProviderErrorBeforeCommit && result.HasResponse() &&
 			result.StatusCode >= http.StatusOK &&
 			result.StatusCode < http.StatusMultipleChoices {
-			handler.recordCredentialSuccess(ref, attemptNow)
+			handler.recordCredentialSuccess(ref, attemptNow, failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), operation))
 		}
 		recordedAttempt := recorder.recordAttempt(
 			selection, normalizedCredential.secrets, result, decision, attemptStarted, attemptCompleted,
@@ -1669,7 +1691,7 @@ func (handler *Handler) executeAttempts(
 			decision,
 			result.StatusCode,
 			attemptNow,
-			optionalModelValue(selection.UpstreamModelID),
+			failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), operation),
 		)
 		if decision.Retry == health.RetryRefreshCredential &&
 			!authRefreshReplayUsed && forwardAttempts < forwardAttemptLimit {

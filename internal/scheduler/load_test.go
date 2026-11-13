@@ -269,3 +269,94 @@ func TestLoadAwareWithRealCredentialLimiter(t *testing.T) {
 		t.Fatalf("in-flight after release = %d, want 0", inFlight)
 	}
 }
+
+func TestLoadAwareAvoidsRecentlyFailedCredential(t *testing.T) {
+	r := newFairnessRegistry(t)
+	snapshot := schedulerSnapshot()
+	progress := r.SchedulingState()
+	// 11 快速失败后名额已归还、在途为 0；12 有 3 个在途。不避让时 11 会因最空闲被首选。
+	limiter := loadLimiter{usage: map[uint][2]int64{12: {0, 3}}}
+	ref11, _ := r.CredentialRef(11)
+	ref12, _ := r.CredentialRef(12)
+	AvoidFailedCredential(progress, ref11, 0, state.FailureAvoidanceKey{}, time.Now())
+	if got := loadPick(t, snapshot, r, 0, limiter); got != 12 {
+		t.Fatalf("selected %d, want 12 while failed credential 11 is avoided", got)
+	}
+	if got := loadPick(t, snapshot, r, 11, limiter); got != 11 {
+		t.Fatalf("sticky request selected %d, want its affinity 11", got)
+	}
+	// 全部候选都需避让时仍按负载分配，不能因此无候选。
+	AvoidFailedCredential(progress, ref12, 0, state.FailureAvoidanceKey{}, time.Now())
+	if got := loadPick(t, snapshot, r, 0, limiter); got != 11 {
+		t.Fatalf("selected %d, want least-loaded 11 when every candidate is avoided", got)
+	}
+	ForgetCredentialFailure(progress, ref12, state.FailureAvoidanceKey{}, time.Now())
+	if got := loadPick(t, snapshot, r, 0, limiter); got != 12 {
+		t.Fatalf("selected %d, want 12 once its success cleared the avoidance", got)
+	}
+}
+
+func TestLoadAwareFailureAvoidanceExpires(t *testing.T) {
+	r := newFairnessRegistry(t)
+	snapshot := schedulerSnapshot()
+	limiter := loadLimiter{usage: map[uint][2]int64{12: {0, 3}}}
+	ref, _ := r.CredentialRef(11)
+	AvoidFailedCredential(r.SchedulingState(), ref, 0, state.FailureAvoidanceKey{}, time.Now().Add(-failureAvoidance))
+	if got := loadPick(t, snapshot, r, 0, limiter); got != 11 {
+		t.Fatalf("selected %d, want idle 11 after its avoidance expired", got)
+	}
+}
+
+func TestFailureAvoidancePrefersHealthySoftSaturatedCredential(t *testing.T) {
+	r := newFairnessRegistry(t)
+	snapshot := schedulerSnapshot()
+	group := snapshot.Groups[1]
+	group.CredentialConcurrencyLimit = 10
+	snapshot.Groups[1] = group
+	limiter := loadLimiter{usage: map[uint][2]int64{12: {0, 7}}}
+	ref, _ := r.CredentialRef(11)
+	AvoidFailedCredential(r.SchedulingState(), ref, 0, state.FailureAvoidanceKey{}, time.Now())
+	for range 20 {
+		if got := loadPick(t, snapshot, r, 0, limiter); got != 12 {
+			t.Fatalf("selected %d, want healthy 12 even at 7/10 load", got)
+		}
+	}
+}
+
+func TestAvoidanceFallbackLayers(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		candidates []weightedCredential
+		want       []uint
+	}{
+		{"healthy before failed idle", []weightedCredential{
+			{meta: state.CredentialMeta{ID: 11}, failureAvoided: true},
+			{meta: state.CredentialMeta{ID: 12}, inFlight: 7, concurrencyLimit: 10},
+		}, []uint{12}},
+		{"prefer unsaturated healthy", []weightedCredential{
+			{meta: state.CredentialMeta{ID: 11}, failureAvoided: true},
+			{meta: state.CredentialMeta{ID: 12}, inFlight: 7, concurrencyLimit: 10},
+			{meta: state.CredentialMeta{ID: 13}},
+		}, []uint{13}},
+		{"all failed still filter saturation", []weightedCredential{
+			{meta: state.CredentialMeta{ID: 11}, failureAvoided: true},
+			{meta: state.CredentialMeta{ID: 12}, failureAvoided: true, inFlight: 7, concurrencyLimit: 10},
+		}, []uint{11}},
+		{"all failed and saturated stay available", []weightedCredential{
+			{meta: state.CredentialMeta{ID: 11}, failureAvoided: true, inFlight: 8, concurrencyLimit: 10},
+			{meta: state.CredentialMeta{ID: 12}, failureAvoided: true, inFlight: 7, concurrencyLimit: 10},
+		}, []uint{11, 12}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := withoutAvoided(test.candidates)
+			if len(got) != len(test.want) {
+				t.Fatalf("candidate count = %d, want %d", len(got), len(test.want))
+			}
+			for i, candidate := range got {
+				if candidate.meta.ID != test.want[i] {
+					t.Fatalf("candidate %d = %d, want %d", i, candidate.meta.ID, test.want[i])
+				}
+			}
+		})
+	}
+}

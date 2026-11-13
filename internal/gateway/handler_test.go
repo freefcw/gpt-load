@@ -309,7 +309,7 @@ func TestHandlerSkipsCooldownFromStaleCredentialVersion(t *testing.T) {
 		},
 		http.StatusTooManyRequests,
 		now,
-		"",
+		state.FailureAvoidanceKey{},
 	)
 
 	views := registry.Snapshot()
@@ -484,7 +484,7 @@ func TestHandlerCoordinatesSuccessMutation(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		handler.recordCredentialSuccess(state.CredentialRef{ID: 1, GroupID: 1, IdentityGeneration: 1}, now)
+		handler.recordCredentialSuccess(state.CredentialRef{ID: 1, GroupID: 1, IdentityGeneration: 1}, now, state.FailureAvoidanceKey{})
 		close(done)
 	}()
 	receiveTestSignal(t, coordinator.entered, "success coordinator entry")
@@ -627,7 +627,7 @@ func TestHandlerSkipsStatsWhenRegistryKeyWasDeletedBeforeCompletion(t *testing.T
 		{
 			name: "success",
 			mutate: func(handler *Handler) {
-				handler.recordCredentialSuccess(state.CredentialRef{ID: 1, GroupID: 1, IdentityGeneration: 1}, now)
+				handler.recordCredentialSuccess(state.CredentialRef{ID: 1, GroupID: 1, IdentityGeneration: 1}, now, state.FailureAvoidanceKey{})
 			},
 		},
 	} {

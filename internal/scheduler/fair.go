@@ -23,7 +23,7 @@ func (iterator *Iterator) ChargeReplay(selection Selection, ref state.Credential
 			}
 			weight := effectiveWeight(selection.Group.WeightManual, meta.WeightManual)
 			if weight > 0 {
-				_, charged = iterator.selectCredential([]weightedCredential{{meta: meta, weight: weight}}, ref.ID)
+				_, charged = iterator.selectCredential([]weightedCredential{{meta: meta, weight: weight}}, ref.ID, selectionScope{})
 			}
 		}
 	}
@@ -39,10 +39,11 @@ func (iterator *Iterator) ChargeReplay(selection Selection, ref state.Credential
 }
 
 // selectCredential 只操作 detached 的内存候选。
-func (iterator *Iterator) selectCredential(candidates []weightedCredential, preferred uint) (state.CredentialMeta, bool) {
+func (iterator *Iterator) selectCredential(candidates []weightedCredential, preferred uint, scope selectionScope) (state.CredentialMeta, bool) {
 	var selected state.CredentialMeta
 	var found bool
 	iterator.progress.WithLock(func(ledger *state.SchedulingLedger) {
+		ledger.PruneFailureAvoidance(iterator.now())
 		if ledger.Sequence == ^uint64(0) {
 			return
 		}
@@ -54,7 +55,8 @@ func (iterator *Iterator) selectCredential(candidates []weightedCredential, pref
 		preferredCandidate, preferredFound := findCandidate(eligible, preferred)
 		if !preferredFound {
 			iterator.refreshLoadLocked(ledger, eligible)
-			eligible = withoutSoftSaturated(eligible)
+			iterator.refreshFailureAvoidanceLocked(ledger, eligible, scope)
+			eligible = withoutAvoided(eligible)
 		}
 		less := func(left, right weightedCredential) bool {
 			if iterator.usage != nil {
@@ -171,8 +173,18 @@ func findCandidate(candidates []weightedCredential, id uint) (weightedCredential
 	return weightedCredential{}, false
 }
 
-// withoutSoftSaturated 原地剔除软饱和候选；全部饱和时仍可分配。
-func withoutSoftSaturated(candidates []weightedCredential) []weightedCredential {
+// withoutAvoided 先避让失败候选，再在健康候选中避让软饱和。
+// 两层分别回退：健康但较忙不能导致刚失败的空闲凭据重新入选。
+func withoutAvoided(candidates []weightedCredential) []weightedCredential {
+	healthy := candidates[:0]
+	for _, candidate := range candidates {
+		if !candidate.failureAvoided {
+			healthy = append(healthy, candidate)
+		}
+	}
+	if len(healthy) > 0 {
+		candidates = healthy
+	}
 	fresh := candidates[:0]
 	for _, candidate := range candidates {
 		if !candidate.softSaturated() {

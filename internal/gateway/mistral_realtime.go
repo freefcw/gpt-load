@@ -340,7 +340,7 @@ func (handler *Handler) dialMistralRealtimeSelection(ctx context.Context, record
 			DurationMs: completed.Sub(started).Milliseconds(), FailureCategory: telemetry.FailureCategoryOK,
 			RetryDirective: telemetry.RetryNone, Effect: telemetry.EffectNone, Action: telemetry.ActionTerminate, Committed: true,
 		})
-		handler.recordCredentialSuccess(ref, handler.now())
+		handler.recordCredentialSuccess(ref, handler.now(), failureAvoidanceTarget(*selection.UpstreamModelID, execution.OperationMistralRealtimeTranscription))
 		return conn, nil, health.Decision{}
 	}
 	status := http.StatusBadGateway
@@ -379,7 +379,7 @@ func (handler *Handler) dialMistralRealtimeSelection(ctx context.Context, record
 		Method:                   http.MethodGet, Operation: execution.OperationMistralRealtimeTranscription,
 	})
 	recorder.recordAttempt(selection, prepared.secrets, result, decision, started, completed)
-	handler.applyGroupDecisionEffect(selection.Group, ref, ref.Version, decision, status, handler.now(), *selection.UpstreamModelID)
+	handler.applyGroupDecisionEffect(selection.Group, ref, ref.Version, decision, status, handler.now(), failureAvoidanceTarget(*selection.UpstreamModelID, execution.OperationMistralRealtimeTranscription))
 	return nil, &value, decision
 }
 

@@ -352,7 +352,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 				ScopeHint: scope, Code: code, Summary: summary}}
 		decision := judgeUpstreamResult(result, h.now(), health.DecisionContext{ErrorRules: selection.Group.ErrorRules, Operation: execution.OperationResponsesCreate, Method: http.MethodPost})
 		index := recorder.recordAttempt(selection, nil, result, decision, started, recorder.now())
-		h.applyGroupDecisionEffect(selection.Group, ref, 0, decision, 0, h.now(), optionalModelValue(selection.UpstreamModelID))
+		h.applyGroupDecisionEffect(selection.Group, ref, 0, decision, 0, h.now(), failureAvoidanceTarget(optionalModelValue(selection.UpstreamModelID), execution.OperationResponsesCreate))
 		if decision.Effect == health.EffectSkipGroup {
 			iterator.SkipGroup(selection.GroupID)
 		}
@@ -687,7 +687,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		} else {
 			index = recorder.recordStreamAttempt(selection, credential.secrets, result, decision, started, recorder.now())
 		}
-		h.applyGroupDecisionEffect(selection.Group, ref, 0, decision, result.StatusCode, h.now(), input.UpstreamModelID)
+		h.applyGroupDecisionEffect(selection.Group, ref, 0, decision, result.StatusCode, h.now(), failureAvoidanceTarget(input.UpstreamModelID, execution.OperationResponsesCreate))
 		if decision.Effect == health.EffectSkipGroup {
 			iterator.SkipGroup(selection.GroupID)
 		}
@@ -709,7 +709,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			finishRejectedAttempt = finishFailedAttempt
 		}
 		if result.Stream.EndReason == StreamEndCleanEOF {
-			h.recordCredentialSuccess(ref, h.now())
+			h.recordCredentialSuccess(ref, h.now(), failureAvoidanceTarget(input.UpstreamModelID, execution.OperationResponsesCreate))
 			if requiredRef == nil {
 				h.recordAffinitySuccess(affinity, selection, ref)
 			}

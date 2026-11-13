@@ -321,12 +321,15 @@ func (unlimitedCredentialLimiter) Acquire(uint, int64, int64) (func(), bool) {
 	return func() {}, true
 }
 
-func (handler *Handler) acquireCredentialSlot(selection scheduler.Selection) (func(), bool) {
+func (handler *Handler) acquireCredentialSlot(iterator *scheduler.Iterator, selection scheduler.Selection) (func(), bool) {
 	limiter := handler.credentialLimiter
 	if limiter == nil {
 		limiter = unlimitedCredentialLimiter{}
 	}
-	return limiter.Acquire(selection.CredentialID, selection.CredentialRPMLimit, selection.CredentialConcurrencyLimit)
+	// Commit the real limiter charge and remove pending load under the scheduling lock.
+	return iterator.AcquireCredential(func() (func(), bool) {
+		return limiter.Acquire(selection.CredentialID, selection.CredentialRPMLimit, selection.CredentialConcurrencyLimit)
+	})
 }
 
 type requestAccessQuotaAdmission struct {
@@ -799,6 +802,7 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 		query.PreferredCredentialID = requestAffinity.preferredCredentialID
 	}
 	iterator := scheduler.New(snapshot, handler.registry, query)
+	defer iterator.Close()
 	handler.executeAttempts(
 		ginContext,
 		snapshot,
@@ -1467,10 +1471,11 @@ func (handler *Handler) executeAttempts(
 				return
 			}
 		}
-		// 凭据本地名额在调度后立即扣减。调度器已过滤满额凭据，这里仍可能因并发竞争失败；
+		// 调度时只预留 pending 负载；准备、审查和分组准入成功后才扣减真实 RPM/并发名额。
+		// 扣减与移除 pending 在调度锁内原子完成；调度已过滤满额凭据，这里仍可能因并发竞争失败。
 		// 首次竞争失败回到调度器重试一次，避免把短暂竞争直接升级为整次请求限流。
 		// RPM 不回滚，并发随请求结束归还。
-		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
+		releaseCredential, acquired := handler.acquireCredentialSlot(iterator, selection)
 		if !acquired {
 			releaseGroup()
 			credentialSlotRejected[selection.CredentialID] = struct{}{}

@@ -226,6 +226,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 		query.AllowedCredentialRefs[ref.ID] = ref
 	}
 	iterator := scheduler.New(request.snapshot, handler.registry, query)
+	defer iterator.Close()
 	setupContext, cancelSetup := context.WithTimeout(c.Request.Context(), liveSetupTimeout)
 	defer cancelSetup()
 	failure := reasonNoCandidate
@@ -313,7 +314,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 			failed(*groupFailure)
 			return
 		}
-		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
+		releaseCredential, acquired := handler.acquireCredentialSlot(iterator, selection)
 		if !acquired {
 			releaseGroup()
 			credentialSlotRejected[selection.CredentialID] = struct{}{}

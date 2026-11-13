@@ -59,6 +59,7 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 	query.AllowedCredentialIDs = allowedIDs
 	query.AllowedCredentialRefs = allowedRefs
 	iterator := scheduler.New(snapshot, handler.registry, query)
+	defer iterator.Close()
 	selection, err := iterator.Next()
 	if err != nil {
 		if _, limited := iterator.CredentialLimitedUntil(); limited {
@@ -151,7 +152,7 @@ func (handler *Handler) executeJevDecision(ctx context.Context, snapshot *state.
 		decision.Reason = failure.Code
 		return decision, result
 	}
-	releaseCredential, acquired := handler.acquireCredentialSlot(selection)
+	releaseCredential, acquired := handler.acquireCredentialSlot(iterator, selection)
 	if !acquired {
 		release()
 		decision.Reason = reasonCredentialRateLimited.Code

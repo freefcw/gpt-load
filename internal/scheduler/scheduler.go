@@ -40,10 +40,15 @@ type Query struct {
 }
 
 // CredentialLimiter 是凭据本地 RPM/并发限额的只读探针。
-// 名额扣减由网关在拿到 Selection 后立即完成，调度器只负责把满额凭据排除出候选池。
+// 调度阶段只预留负载，不消耗限额；网关准备完成后通过 AcquireCredential 扣减真实名额。
 type CredentialLimiter interface {
 	Available(credentialID uint, rpmLimit, concurrencyLimit int64) bool
 	RetryAfter(credentialID uint, rpmLimit int64) time.Time
+}
+
+// usageReader 是限额器可选的用量读取能力；不支持时调度器退回纯 Progress 轮转。
+type usageReader interface {
+	Usage(credentialID uint) (rpmUsed, inFlight int64)
 }
 
 type Selection struct {
@@ -55,7 +60,7 @@ type Selection struct {
 	UpstreamModelID          *string
 	Group                    state.GroupView
 	ResponsesStoreDowngraded bool
-	// 解析后的凭据本地限额，网关据此在调度后立即扣减名额。0 表示不限。
+	// 解析后的凭据本地限额，网关准备完成后经 AcquireCredential 据此扣减名额。0 表示不限。
 	CredentialRPMLimit         int64
 	CredentialConcurrencyLimit int64
 }
@@ -67,8 +72,23 @@ type candidateTarget struct {
 }
 
 type weightedCredential struct {
-	meta   state.CredentialMeta
-	weight int64
+	meta             state.CredentialMeta
+	weight           int64
+	inFlight         int64
+	rpmUsed          int64
+	concurrencyLimit int64
+	rpmLimit         int64
+}
+
+// softSaturationPercent 是非粘滞请求的避让阈值，不是硬性预留配额。
+// 全部候选均软饱和时仍继续分配；未配置限额时不应用该阈值。
+const softSaturationPercent = 70
+
+// softSaturated 在途或 RPM 用量达到有效上限的接新比例时优先避让。
+// 小上限按整数请求向上取整；上限为 1–3 时软阈值与硬上限重合。
+func (candidate weightedCredential) softSaturated() bool {
+	return (candidate.concurrencyLimit > 0 && candidate.inFlight*100 >= candidate.concurrencyLimit*softSaturationPercent) ||
+		(candidate.rpmLimit > 0 && candidate.rpmUsed*100 >= candidate.rpmLimit*softSaturationPercent)
 }
 
 type credentialLimitObservation struct {
@@ -101,6 +121,8 @@ type Iterator struct {
 	allowedCredentialRefs  map[uint]credentialIdentity
 	staticReason           ReasonCode
 	limiter                CredentialLimiter
+	usage                  usageReader
+	reservedCredentialID   uint
 	credentialLimited      bool
 	credentialLimitedUntil time.Time
 	now                    func() time.Time
@@ -118,6 +140,8 @@ type normalizedQuery struct {
 	allowedCredentialIDs     map[uint]struct{}
 }
 
+// New creates a request-local iterator. Defer Close to cancel pending load if
+// the request exits before AcquireCredential (e.g. preparation failure).
 func New(snapshot *state.ConfigSnapshot, credentials CredentialSource, query Query) *Iterator {
 	return newWithClock(snapshot, credentials, query, time.Now)
 }
@@ -156,6 +180,7 @@ func newWithClock(
 	query Query,
 	now func() time.Time,
 ) *Iterator {
+	usage, _ := query.Limiter.(usageReader)
 	iterator := &Iterator{
 		snapshot: snapshot, query: query, operation: normalizeQuery(query).operation,
 		credentials:           credentials,
@@ -166,6 +191,7 @@ func newWithClock(
 		allowedCredentialIDs:  cloneAllowedCredentialIDs(query),
 		preferredCredentialID: query.PreferredCredentialID,
 		limiter:               query.Limiter,
+		usage:                 usage,
 		tried:                 make(map[uint]struct{}),
 		skippedGroups:         make(map[uint]struct{}),
 		now:                   now,
@@ -318,7 +344,11 @@ func (iterator *Iterator) withWeightedPool(candidates *candidatePool, modes []ch
 				if weight > 0 {
 					available, retryAfter := iterator.credentialAvailable(credential, target.group)
 					if available {
-						weighted = append(weighted, weightedCredential{meta: credential, weight: weight})
+						weighted = append(weighted, weightedCredential{
+							meta: credential, weight: weight,
+							concurrencyLimit: state.EffectiveCredentialLimit(target.group.CredentialConcurrencyLimit, credential.ConcurrencyLimit),
+							rpmLimit:         state.EffectiveCredentialLimit(target.group.CredentialRPMLimit, credential.RPMLimit),
+						})
 					} else {
 						limited = append(limited, credentialLimitObservation{retryAfter: retryAfter})
 					}
@@ -342,6 +372,7 @@ func (iterator *Iterator) Next() (Selection, error) {
 	if iterator == nil || iterator.credentials == nil || iterator.progress == nil || iterator.now == nil {
 		return Selection{}, ErrExhausted
 	}
+	iterator.Close()
 	// The limit result describes only this exhaustion, not anything observed
 	// earlier in the iterator's lifetime.
 	iterator.credentialLimited = false

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"gpt-load/internal/ratelimit"
 	"gpt-load/internal/state"
 )
 
@@ -25,6 +26,56 @@ func benchmarkSchedulingRegistry(b *testing.B, small, large int) *state.Credenti
 		b.Fatal(err)
 	}
 	return r
+}
+
+// Unlike the progress-only benchmarks, this includes real usage reads,
+// pending reservations, commit, and release for both serial and burst traffic.
+func BenchmarkLoadAwareScheduling(b *testing.B) {
+	for _, size := range []int{100, 1000, 10000} {
+		for _, parallel := range []bool{false, true} {
+			b.Run(fmt.Sprintf("%d/parallel=%t", size, parallel), func(b *testing.B) {
+				r := benchmarkSchedulingRegistry(b, size, 0)
+				snapshot := schedulerSnapshot()
+				limiter := ratelimit.NewCredentialLimiter()
+				query := fairnessQuery(0)
+				query.Limiter = limiter
+				for id := uint(1); id <= 10; id++ {
+					release, _ := limiter.Acquire(id, 0, 0)
+					b.Cleanup(release)
+				}
+				run := func() {
+					iterator := New(snapshot, r, query)
+					defer iterator.Close()
+					selection, err := iterator.Next()
+					if err != nil {
+						b.Error(err)
+						return
+					}
+					release, ok := iterator.AcquireCredential(func() (func(), bool) {
+						return limiter.Acquire(selection.CredentialID, 0, 0)
+					})
+					if !ok {
+						b.Error("unlimited acquire rejected")
+						return
+					}
+					release()
+				}
+				b.ReportAllocs()
+				b.ResetTimer()
+				if parallel {
+					b.RunParallel(func(pb *testing.PB) {
+						for pb.Next() {
+							run()
+						}
+					})
+				} else {
+					for b.Loop() {
+						run()
+					}
+				}
+			})
+		}
+	}
 }
 
 func BenchmarkGlobalScheduling(b *testing.B) {

@@ -160,6 +160,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 		query.AllowedCredentialRefs[ref.ID] = ref
 	}
 	iterator := scheduler.New(request.snapshot, handler.registry, query)
+	defer iterator.Close()
 	failure := reasonNoCandidate
 	var cooldownUntil time.Time
 	var slotRetryAt time.Time
@@ -187,7 +188,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 		if rejection != nil {
 			return nil, "", nil, rejection
 		}
-		releaseCredential, acquired := handler.acquireCredentialSlot(selection)
+		releaseCredential, acquired := handler.acquireCredentialSlot(iterator, selection)
 		if !acquired {
 			releaseGroup()
 			credentialSlotRejected[selection.CredentialID] = struct{}{}

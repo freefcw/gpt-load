@@ -324,6 +324,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		query.PreferredCredentialID = affinity.preferredCredentialID
 	}
 	iterator := scheduler.New(snapshot, h.registry, query)
+	defer iterator.Close()
 	redactionCipher, err := h.encryption.NewRedactionCipher(key.ID)
 	if err != nil {
 		reject(reasonRedactionFailed)
@@ -587,7 +588,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			reject(*failure)
 			return
 		}
-		releaseCredential, acquired := h.acquireCredentialSlot(selection)
+		releaseCredential, acquired := h.acquireCredentialSlot(iterator, selection)
 		if !acquired {
 			releaseGroup()
 			credentialSlotRejected[selection.CredentialID] = struct{}{}

@@ -57,7 +57,10 @@ func (m *SchedulingMember) Admit(baseline SchedulingProgress) {
 // SchedulingLedger 只在 SchedulingState.WithLock 回调内访问。
 // 凭据事实属于 Registry；本表独立保存分配历史，不随凭据配置替换而回退。
 type SchedulingLedger struct {
-	Members         map[uint]*SchedulingMember
+	Members map[uint]*SchedulingMember
+	// Reservations counts selected requests still preparing to acquire a real
+	// credential slot. This process-local load is never checkpointed.
+	Reservations    map[uint]int64
 	ModelCursors    map[GroupModelKey][]string
 	Groups          map[uint]bool
 	GroupPriorities map[uint]int32
@@ -78,7 +81,7 @@ type SchedulingState struct {
 func NewSchedulingState() *SchedulingState {
 	return &SchedulingState{ledger: SchedulingLedger{
 		Members: make(map[uint]*SchedulingMember), Groups: make(map[uint]bool),
-		ModelCursors: make(map[GroupModelKey][]string),
+		ModelCursors: make(map[GroupModelKey][]string), Reservations: make(map[uint]int64),
 	}}
 }
 

@@ -38,6 +38,12 @@ var reasonMistralRealtimeUpgrade = reason{
 	Message: "WebSocket upgrade is required.",
 }
 
+var reasonMistralRealtimeTimeout = reason{
+	Status:  http.StatusGatewayTimeout,
+	Code:    "mistral_realtime_timeout",
+	Message: "Realtime transcription timed out.",
+}
+
 var reasonMistralRealtimeOrigin = reason{
 	Status:  http.StatusForbidden,
 	Code:    "websocket_origin_rejected",
@@ -168,7 +174,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 	credentialSlotRetried := make(map[uint]struct{})
 	for sequence := 1; sequence <= retryAttemptLimit(request.snapshot.Settings.RetryCount); sequence++ {
 		if ctx.Err() != nil {
-			value := reason{Status: http.StatusGatewayTimeout, Code: "mistral_realtime_timeout", Message: "Realtime transcription timed out."}
+			value := reasonMistralRealtimeTimeout
 			return nil, "", nil, &value
 		}
 		selection, err := iterator.Next()
@@ -184,6 +190,21 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 			return nil, "", nil, &value
 		}
 		ref := query.AllowedCredentialRefs[selection.CredentialID]
+		prepared, preparationFailure := handler.prepareMistralRealtimeSelection(selection, ref, rawQuery)
+		if preparationFailure != nil {
+			failure = *preparationFailure
+			// Preparation failures are non-retryable and do not create an
+			// upstream attempt; retain any earlier credential-slot rejection.
+			if len(credentialSlotRejected) > 0 {
+				break
+			}
+			handler.setMistralRealtimeRetryAfter(c, failure, cooldownUntil)
+			return nil, "", nil, &failure
+		}
+		if ctx.Err() != nil {
+			value := reasonMistralRealtimeTimeout
+			return nil, "", nil, &value
+		}
 		releaseGroup, rejection := handler.acquireGroupConcurrency(selection.GroupID)
 		if rejection != nil {
 			return nil, "", nil, rejection
@@ -209,7 +230,7 @@ func (handler *Handler) dialMistralRealtime(ctx context.Context, c *gin.Context,
 				release()
 			}
 		}()
-		conn, dialFailure, decision := handler.dialMistralRealtimeSelection(ctx, recorder, selection, ref, rawQuery, sequence)
+		conn, dialFailure, decision := handler.dialMistralRealtimeSelection(ctx, recorder, selection, ref, prepared, sequence)
 		if dialFailure == nil {
 			transferred = true
 			return conn, *selection.UpstreamModelID, release, nil
@@ -257,42 +278,58 @@ func (handler *Handler) setMistralRealtimeRetryAfter(c *gin.Context, failure rea
 	setCooldownRetryAfter(c, until, handler.now())
 }
 
-// dialMistralRealtimeSelection dials one selected credential. The upstream
-// status is kept for the client, health decision, and request log.
-func (handler *Handler) dialMistralRealtimeSelection(ctx context.Context, recorder *requestRecorder, selection scheduler.Selection, ref state.CredentialRef, rawQuery string, sequence int) (*websocket.Conn, *reason, health.Decision) {
+type preparedMistralRealtimeSelection struct {
+	dialer   *websocket.Dialer
+	endpoint string
+	header   http.Header
+	secrets  []string
+}
+
+// prepareMistralRealtimeSelection completes local setup while only pending
+// scheduling load is reserved. It neither charges RPM nor dials upstream.
+func (handler *Handler) prepareMistralRealtimeSelection(selection scheduler.Selection, ref state.CredentialRef, rawQuery string) (*preparedMistralRealtimeSelection, *reason) {
 	encrypted, exists := handler.registry.ActiveEncryptedCredentialDataIfMatch(ref)
 	if !exists {
 		value := reasonConfigurationChanged
-		return nil, &value, health.Decision{}
+		return nil, &value
 	}
 	plain, err := handler.encryption.Decrypt(encrypted)
 	if err != nil {
 		value := reasonConfigurationChanged
-		return nil, &value, health.Decision{}
+		return nil, &value
 	}
 	credential, err := normalizeChannelCredential(handler.channels, handler.subscriptions, selection.ChannelID, selection.Group.ConnectionType, plain)
 	if err != nil || credential.apiKey == "" {
 		value := reasonConfigurationChanged
-		return nil, &value, health.Decision{}
+		return nil, &value
 	}
 	endpoint, err := mistralRealtimeUpstreamURL(selection.ResolvedTarget.TargetConfig, *selection.UpstreamModelID, rawQuery)
 	if err != nil {
 		value := reasonInvalidProtocolRequest
-		return nil, &value, health.Decision{}
+		return nil, &value
 	}
 	effective, _, err := resolveAttemptProxy(handler.encryption, selection.Group.Proxy, ref)
 	if err != nil {
 		value := reasonConfigurationChanged
-		return nil, &value, health.Decision{}
+		return nil, &value
 	}
 	dialer, err := mistralRealtimeDialer(effective)
 	if err != nil {
 		value := reasonConfigurationChanged
-		return nil, &value, health.Decision{}
+		return nil, &value
 	}
-	header := http.Header{"Authorization": {"Bearer " + credential.apiKey}}
+	return &preparedMistralRealtimeSelection{
+		dialer: dialer, endpoint: endpoint,
+		header:  http.Header{"Authorization": {"Bearer " + credential.apiKey}},
+		secrets: credential.secrets,
+	}, nil
+}
+
+// dialMistralRealtimeSelection dials one prepared credential after slot acquisition.
+// The upstream status is kept for the client, health decision, and request log.
+func (handler *Handler) dialMistralRealtimeSelection(ctx context.Context, recorder *requestRecorder, selection scheduler.Selection, ref state.CredentialRef, prepared *preparedMistralRealtimeSelection, sequence int) (*websocket.Conn, *reason, health.Decision) {
 	started := recorder.beforeForward()
-	conn, response, dialErr := dialer.DialContext(ctx, endpoint, header)
+	conn, response, dialErr := prepared.dialer.DialContext(ctx, prepared.endpoint, prepared.header)
 	completed := handler.requestNow()
 	if dialErr == nil {
 		recorder.attempts = append(recorder.attempts, telemetry.Attempt{
@@ -341,7 +378,7 @@ func (handler *Handler) dialMistralRealtimeSelection(ctx context.Context, record
 		DefaultRateLimitCooldown: subscriptionruntime.DefaultRefreshFailureCooldown,
 		Method:                   http.MethodGet, Operation: execution.OperationMistralRealtimeTranscription,
 	})
-	recorder.recordAttempt(selection, credential.secrets, result, decision, started, completed)
+	recorder.recordAttempt(selection, prepared.secrets, result, decision, started, completed)
 	handler.applyGroupDecisionEffect(selection.Group, ref, ref.Version, decision, status, handler.now(), *selection.UpstreamModelID)
 	return nil, &value, decision
 }

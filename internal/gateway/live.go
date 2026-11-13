@@ -309,31 +309,7 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 			failed(reasonInvalidProtocolRequest)
 			return
 		}
-		releaseGroup, groupFailure := handler.acquireGroupConcurrency(selection.GroupID)
-		if groupFailure != nil {
-			failed(*groupFailure)
-			return
-		}
-		releaseCredential, acquired := handler.acquireCredentialSlot(iterator, selection)
-		if !acquired {
-			releaseGroup()
-			credentialSlotRejected[selection.CredentialID] = struct{}{}
-			earliestRetryAfter(&credentialSlotRetryAt, credentialSlotRetryAfter(handler.credentialLimiter, selection))
-			if _, retried := credentialSlotRetried[selection.CredentialID]; !retried {
-				credentialSlotRetried[selection.CredentialID] = struct{}{}
-				iterator.RetryCredential(selection.CredentialID)
-			}
-			continue
-		}
-		delete(credentialSlotRejected, selection.CredentialID)
-		groupTransferred := false
-		defer func() {
-			if !groupTransferred {
-				releaseGroup()
-				releaseCredential()
-			}
-		}()
-		releaseConcurrency := func() { releaseGroup(); releaseCredential(); releaseRequest() }
+		// Keep local media/proxy setup pending; charge only before the upstream attempt.
 		var media *liveMediaSession
 		upstreamOffer := offer
 		if selection.Group.CodexLiveMode == state.CodexLiveRelay {
@@ -355,6 +331,36 @@ func (handler *Handler) createCodexLive(c *gin.Context, request *dataPlaneReques
 				_ = media.Close()
 			}
 		}()
+		if setupContext.Err() != nil {
+			failed(reasonLiveUnavailable)
+			return
+		}
+		releaseGroup, groupFailure := handler.acquireGroupConcurrency(selection.GroupID)
+		if groupFailure != nil {
+			failed(*groupFailure)
+			return
+		}
+		releaseCredential, acquired := handler.acquireCredentialSlot(iterator, selection)
+		if !acquired {
+			_ = media.Close()
+			releaseGroup()
+			credentialSlotRejected[selection.CredentialID] = struct{}{}
+			earliestRetryAfter(&credentialSlotRetryAt, credentialSlotRetryAfter(handler.credentialLimiter, selection))
+			if _, retried := credentialSlotRetried[selection.CredentialID]; !retried {
+				credentialSlotRetried[selection.CredentialID] = struct{}{}
+				iterator.RetryCredential(selection.CredentialID)
+			}
+			continue
+		}
+		delete(credentialSlotRejected, selection.CredentialID)
+		groupTransferred := false
+		defer func() {
+			if !groupTransferred {
+				releaseGroup()
+				releaseCredential()
+			}
+		}()
+		releaseConcurrency := func() { releaseGroup(); releaseCredential(); releaseRequest() }
 		started := recorder.beforeForward()
 		updateDebugHeaders(c.Writer.Header(), selection.Group.Name, sequence)
 		upstream, evidence := handler.liveOpener.OpenLive(setupContext, spec, upstreamOffer, sessionJSON)

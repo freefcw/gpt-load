@@ -5,8 +5,8 @@ import { useI18n } from 'vue-i18n'
 import { describeLiveLimitUsage } from '@shared/live-limit-usage'
 import QuotaProgressBar from '@/components/ui/QuotaProgressBar.vue'
 
-// 限额实时用量：已用/上限 + 进度条。上限为 0 时限流器不记账，已用数恒为 0，
-// 所以不写“0/∞”，只留 ∞，并用独立颜色表示“没有上限”。
+// 限额实时用量：已用/上限 + 进度条。上限为 0 表示不限，不写“已用/∞”，
+// 只留 ∞，并用独立颜色表示“没有上限”。
 const props = defineProps<{
   label: string
   used: number

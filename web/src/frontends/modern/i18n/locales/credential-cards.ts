@@ -169,8 +169,8 @@ export const zhCN = {
     rpm: 'RPM',
     concurrency: '并发',
     summary: '{used}/{limit}',
-    rpmHelp: '近 60 秒内计入本地限额的请求。没有上限时不计数。',
-    concurrencyHelp: '当前仍在处理的请求。没有上限时不计数。',
+    rpmHelp: '近 60 秒内计入本地限额的请求。没有上限时只显示 ∞，但仍会计数并用于负载均衡。',
+    concurrencyHelp: '当前仍在处理的请求。没有上限时只显示 ∞，但仍会计数并用于负载均衡。',
   },
 }
 export const enUS: typeof zhCN = {
@@ -351,8 +351,9 @@ export const enUS: typeof zhCN = {
     concurrency: 'Concurrent',
     summary: '{used}/{limit}',
     rpmHelp:
-      'Requests counted against the local limit in the last 60 seconds. Unlimited credentials are not counted.',
-    concurrencyHelp: 'Requests still in flight. Unlimited credentials are not counted.',
+      'Requests counted against the local limit in the last 60 seconds. Unlimited credentials show ∞ but are still counted for load balancing.',
+    concurrencyHelp:
+      'Requests still in flight. Unlimited credentials show ∞ but are still counted for load balancing.',
   },
 }
 export const jaJP: typeof zhCN = {
@@ -529,7 +530,9 @@ export const jaJP: typeof zhCN = {
     rpm: 'RPM',
     concurrency: '同時',
     summary: '{used}/{limit}',
-    rpmHelp: '直近 60 秒にローカル上限へ計上したリクエスト。上限がない場合は計上しません。',
-    concurrencyHelp: '処理中のリクエスト。上限がない場合は計上しません。',
+    rpmHelp:
+      '直近 60 秒にローカル上限へ計上したリクエスト。上限がない場合は ∞ のみ表示しますが、負荷分散のために計上を続けます。',
+    concurrencyHelp:
+      '処理中のリクエスト。上限がない場合は ∞ のみ表示しますが、負荷分散のために計上を続けます。',
   },
 }

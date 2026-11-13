@@ -1,7 +1,7 @@
 package control
 
 // CredentialLimitUsage 读取网关进程内的凭据限额计数，不落库。
-// RPM 是 60 秒滑动窗口，并发是尚未归还的在途请求；对应上限小于等于 0 时不记账。
+// RPM 是 60 秒滑动窗口，并发是尚未归还的在途请求；上限未配置也照常记账。
 type CredentialLimitUsage interface {
 	Usage(credentialID uint) (rpmUsed, inFlight int64)
 }

@@ -102,7 +102,7 @@ type CredentialItemResponse struct {
 	EffectiveConcurrencyLimit int64 `json:"effective_concurrency_limit"`
 	GroupRPMLimit             int64 `json:"group_rpm_limit"`
 	GroupConcurrencyLimit     int64 `json:"group_concurrency_limit"`
-	// RPMUsed / ConcurrencyUsed 是当前进程内的限额计数，不落库。上限为 0 时限流器不记账，值为 0。
+	// RPMUsed / ConcurrencyUsed 是当前进程内的限额计数，不落库；上限未配置也照常记账。
 	RPMUsed                 int64                         `json:"rpm_used"`
 	ConcurrencyUsed         int64                         `json:"concurrency_used"`
 	RecentSuccessCount      uint64                        `json:"recent_success_count"`

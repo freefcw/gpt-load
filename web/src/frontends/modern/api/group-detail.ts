@@ -277,7 +277,7 @@ export interface CredentialRow {
   effectiveConcurrencyLimit: number
   groupRpmLimit: number
   groupConcurrencyLimit: number
-  // 当前进程内的限额计数。上限为 0 时不记账，值为 0。
+  // 当前进程内的限额计数；上限未配置也照常记账。
   rpmUsed: number
   concurrencyUsed: number
   successes: number

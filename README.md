@@ -73,6 +73,16 @@ Your application only needs one base URL and one AccessKey. Providers, accounts,
 - **Scheduling and failure isolation built in** — Multi-credential scheduling, configurable weights, retries, cooldown, blacklisting, and session affinity reduce the impact of overloaded or failing credentials.
 - **Observable, self-hosted, and simple to deploy** — Inspect health, routes, logs, usage, and cost estimates in an embedded UI backed by SQLite, MySQL, or PostgreSQL with local credential encryption.
 
+### Dynamic load and long-running requests
+
+Within the existing priority and route-mode tiers, non-sticky requests compare in-flight requests per effective weight, then requests in the last 60 seconds per effective weight, and finally shared scheduling progress. Weighted fairness is preserved when live load is zero, including after the RPM window expires. Selected requests immediately reserve scheduling load during preparation; failed or canceled preparation releases the reservation without consuming RPM.
+
+New traffic preferentially avoids credentials at 70% of a configured concurrency or RPM limit. This is a soft threshold, not a guaranteed 30% reserve: unlimited credentials have no soft threshold, and small limits round up to whole requests. Failure and load avoidance are separate layers: prefer candidates without a recent failure first, then avoid soft saturation. If all healthy candidates are soft-saturated, traffic still stays with them; failed candidates return only when every candidate is failure-avoided. Sticky requests keep their affinity through both kinds of avoidance but remain subject to hard limits.
+
+Explicit upstream failures, such as capacity rejections, are avoided for 15 seconds or until matching success feedback when health handling has not already applied a cooldown or group skip. Credential-wide failures affect the account; model failures affect only the actual upstream model and operation. Success on a different model or operation does not clear that target's avoidance. Feedback is fenced by credential identity, so late results from a replaced identity cannot affect its replacement. Avoidance entries are cleaned on expiry, removal, or identity replacement and are never persisted.
+
+These counts are process-local. They protect active long-running requests, not future demand during idle gaps in multi-turn conversations, and do not measure tokens or context length. Subsequent activity periodically cleans expired RPM windows without releasing active long-running requests.
+
 ## Online demo
 
 [https://demo.gpt-load.com](https://demo.gpt-load.com)

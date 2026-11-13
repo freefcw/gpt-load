@@ -508,9 +508,9 @@ export default {
         title: 'Candidate Groups',
         description: {
           native_first:
-            'Select the highest available priority, prefer native routes within that tier, then rotate by effective weight and shared progress. Lower tiers remain backups. Affinity applies, so weight shares are not actual traffic ratios.',
+            'Select the highest available priority, prefer native routes within that tier, then compare weighted in-flight load, RPM, and shared progress, preferentially avoiding soft-saturated credentials. Lower tiers remain backups. Affinity applies, so weight shares are not actual traffic ratios.',
           weighted_mix:
-            'Select the highest available priority, then rotate native and converted candidates in that tier by effective weight and shared progress. Lower tiers remain backups. Affinity applies, so weight shares are not actual traffic ratios.',
+            'Select the highest available priority, then compare native and converted candidates by weighted in-flight load, RPM, and shared progress, preferentially avoiding soft-saturated credentials. Lower tiers remain backups. Affinity applies, so weight shares are not actual traffic ratios.',
         },
         count: '{count}',
         tableLabel: 'Candidate Group route explanation',

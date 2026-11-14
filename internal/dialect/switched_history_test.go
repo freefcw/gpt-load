@@ -181,6 +181,17 @@ func TestStripEmbeddedThoughtSignaturesLeavesToolPayloads(t *testing.T) {
 	if toolInput["call_id"] != long || toolContent["tool_call_id"] != long {
 		t.Fatalf("nested tool data rewritten: %#v %#v", toolInput, toolContent)
 	}
+
+	chat := `{"messages":[{"role":"tool","tool_call_id":"` + long + `","content":[{"type":"function_call","call_id":"` + long + `","name":"f","arguments":"{}"}]}]}`
+	sanitized, changed, err = StripEmbeddedThoughtSignatures([]byte(chat))
+	if err != nil || !changed {
+		t.Fatalf("chat tool message changed=%t err=%v", changed, err)
+	}
+	message := decodeTestJSON(t, sanitized)["messages"].([]any)[0].(map[string]any)
+	nested := message["content"].([]any)[0].(map[string]any)
+	if message["tool_call_id"] != "call_payload" || nested["call_id"] != long {
+		t.Fatalf("chat tool output rewritten: %#v", message)
+	}
 }
 
 func TestStripEmbeddedThoughtSignaturesFitsOversizedBase(t *testing.T) {

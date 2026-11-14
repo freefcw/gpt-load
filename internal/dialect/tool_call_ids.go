@@ -135,7 +135,8 @@ func toolPayloadKey(object map[string]any, key string) bool {
 		}
 	case "content":
 		kind, _ := object["type"].(string)
-		if kind == "tool_result" {
+		role, _ := object["role"].(string)
+		if kind == "tool_result" || role == "tool" {
 			return true
 		}
 	}

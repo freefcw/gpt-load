@@ -98,9 +98,13 @@ func sanitizeNativeRequestBody(spec execution.AttemptSpec, stream bool) ([]byte,
 				return nil, err
 			}
 		}
-		return body, nil
+		return sanitizeUpstreamChatHistory(spec, body)
 	case spec.ClientProtocol == protocol.Anthropic && spec.Operation == execution.OperationCountTokens:
-		return sanitizeNativeChatBody(spec.Body, spec.UpstreamModel)
+		body, err := sanitizeNativeChatBody(spec.Body, spec.UpstreamModel)
+		if err != nil {
+			return nil, err
+		}
+		return sanitizeUpstreamChatHistory(spec, body)
 	case spec.ClientProtocol == protocol.Gemini && spec.Operation == execution.OperationChatCompletion:
 		object, err := decodeNativeJSONObject(spec.Body)
 		if err != nil {
@@ -141,9 +145,13 @@ func sanitizeNativeRequestBody(spec execution.AttemptSpec, stream bool) ([]byte,
 			changed = true
 		}
 		if !changed {
-			return append([]byte(nil), spec.Body...), nil
+			return sanitizeUpstreamChatHistory(spec, append([]byte(nil), spec.Body...))
 		}
-		return encodeNativeJSONObject(object)
+		body, err := encodeNativeJSONObject(object)
+		if err != nil {
+			return nil, err
+		}
+		return sanitizeUpstreamChatHistory(spec, body)
 	case spec.ClientProtocol == protocol.OpenAIResponses &&
 		(spec.Operation == execution.OperationResponsesCompact || spec.Operation == execution.OperationResponsesInputTokens || spec.Operation == execution.OperationWebSearch):
 		object, err := decodeNativeJSONObject(spec.Body)
@@ -162,9 +170,13 @@ func sanitizeNativeRequestBody(spec execution.AttemptSpec, stream bool) ([]byte,
 			changed = true
 		}
 		if !changed {
-			return append([]byte(nil), spec.Body...), nil
+			return sanitizeUpstreamChatHistory(spec, append([]byte(nil), spec.Body...))
 		}
-		return encodeNativeJSONObject(object)
+		body, err := encodeNativeJSONObject(object)
+		if err != nil {
+			return nil, err
+		}
+		return sanitizeUpstreamChatHistory(spec, body)
 	case spec.ClientProtocol == protocol.OpenAIResponses && spec.Operation == execution.OperationResponsesPassthrough:
 		if len(bytes.TrimSpace(spec.Body)) == 0 {
 			return nil, nil
@@ -196,6 +208,26 @@ func sanitizeNativeRequestBody(spec execution.AttemptSpec, stream bool) ([]byte,
 		}
 		stripNativeControlFields(object)
 		return encodeNativeJSONObject(object)
+	}
+}
+
+// sanitizeUpstreamChatHistory removes history the selected upstream rejects
+// after a mid-conversation model switch. Claude refuses unsigned thinking
+// blocks. OpenAI caps call IDs at 64 characters, so a Gemini thought signature
+// embedded as "<baseID>_ts_<signature>" is cut back to the base ID.
+func sanitizeUpstreamChatHistory(spec execution.AttemptSpec, body []byte) ([]byte, error) {
+	switch spec.ClientProtocol {
+	case protocol.OpenAICompletions, protocol.OpenAIResponses:
+		sanitized, _, err := dialect.StripEmbeddedThoughtSignatures(body)
+		return sanitized, err
+	case protocol.Anthropic:
+		if !dialect.IsClaudeModel(spec.UpstreamModel) {
+			return body, nil
+		}
+		sanitized, _, err := dialect.SanitizeClaudeThinkingHistory(body)
+		return sanitized, err
+	default:
+		return body, nil
 	}
 }
 

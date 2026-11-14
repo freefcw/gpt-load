@@ -859,6 +859,14 @@ func (r *Runtime) prepare(spec execution.AttemptSpec, stream bool) (preparedAtte
 			secrets:           secrets,
 		}, nil
 	}
+	if mode == channel.RouteConverted {
+		sanitized, sanitizeErr := sanitizeConvertedOpenAIHistory(providerKind, spec.UpstreamModel, spec.Body)
+		if sanitizeErr != nil {
+			failure := notSentUnaryFailure(execution.ErrorKindInvalidRequest, "invalid request body")
+			return preparedAttempt{}, &failure
+		}
+		spec.Body = sanitized
+	}
 	if spec.Operation == execution.OperationCountTokens ||
 		spec.Operation == execution.OperationResponsesInputTokens {
 		request, conversionErr := buildConvertedResponsesRequest(spec, provider)

@@ -61,6 +61,18 @@ func TestSanitizeClaudeThinkingHistory(t *testing.T) {
 			body:    `{"messages":[{"role":"user","content":"q"},{"role":"assistant","content":"a"}]}`,
 			changed: false,
 		},
+		{
+			name:    "split final tool turn disables thinking",
+			body:    `{"thinking":{"type":"enabled","budget_tokens":1024},"messages":[{"role":"user","content":"q"},{"role":"assistant","content":[` + unsigned + `]},{"role":"assistant","content":[` + toolUse + `]},` + toolResult + `]}`,
+			want:    `{"messages":[{"role":"user","content":"q"},{"role":"assistant","content":[` + toolUse + `]},` + toolResult + `]}`,
+			changed: true,
+		},
+		{
+			name:    "earlier split tool turn keeps thinking enabled",
+			body:    `{"thinking":{"type":"enabled","budget_tokens":1024},"messages":[{"role":"user","content":"q"},{"role":"assistant","content":[` + unsigned + `]},{"role":"assistant","content":[` + toolUse + `]},` + toolResult + `,{"role":"assistant","content":[{"type":"text","text":"done"}]},{"role":"user","content":"more"}]}`,
+			want:    `{"thinking":{"type":"enabled","budget_tokens":1024},"messages":[{"role":"user","content":"q"},{"role":"assistant","content":[` + toolUse + `]},` + toolResult + `,{"role":"assistant","content":[{"type":"text","text":"done"}]},{"role":"user","content":"more"}]}`,
+			changed: true,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			sanitized, changed, err := SanitizeClaudeThinkingHistory([]byte(test.body))
@@ -138,5 +150,78 @@ func TestStripEmbeddedThoughtSignatures(t *testing.T) {
 		if err != nil || changed || string(sanitized) != body {
 			t.Fatalf("body changed: changed=%t err=%v body=%s", changed, err, sanitized)
 		}
+	}
+}
+
+func TestStripEmbeddedThoughtSignaturesLeavesToolPayloads(t *testing.T) {
+	long := "call_payload_ts_" + strings.Repeat("Q", 80)
+	body := `{"input":[{"type":"function_call","call_id":"` + long + `","name":"f","arguments":"{\"call_id\":\"` + long + `\"}"},{"type":"function_call_output","call_id":"` + long + `","output":"{\"tool_use_id\":\"` + long + `\"}"}],"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"` + long + `","name":"f","input":{"call_id":"` + long + `"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"` + long + `","content":{"tool_call_id":"` + long + `"}}]}]}`
+	sanitized, changed, err := StripEmbeddedThoughtSignatures([]byte(body))
+	if err != nil || !changed {
+		t.Fatalf("changed=%t err=%v", changed, err)
+	}
+	got := decodeTestJSON(t, sanitized)
+	input := got["input"].([]any)
+	call := input[0].(map[string]any)
+	output := input[1].(map[string]any)
+	if call["call_id"] != "call_payload" || output["call_id"] != "call_payload" {
+		t.Fatalf("protocol call ids = %#v %#v", call["call_id"], output["call_id"])
+	}
+	if call["arguments"] != `{"call_id":"`+long+`"}` || output["output"] != `{"tool_use_id":"`+long+`"}` {
+		t.Fatalf("tool payloads rewritten: %#v %#v", call["arguments"], output["output"])
+	}
+	messages := got["messages"].([]any)
+	toolUse := messages[0].(map[string]any)["content"].([]any)[0].(map[string]any)
+	toolResult := messages[1].(map[string]any)["content"].([]any)[0].(map[string]any)
+	if toolUse["id"] != "call_payload" || toolResult["tool_use_id"] != "call_payload" {
+		t.Fatalf("anthropic ids = %#v %#v", toolUse["id"], toolResult["tool_use_id"])
+	}
+	toolInput := toolUse["input"].(map[string]any)
+	toolContent := toolResult["content"].(map[string]any)
+	if toolInput["call_id"] != long || toolContent["tool_call_id"] != long {
+		t.Fatalf("nested tool data rewritten: %#v %#v", toolInput, toolContent)
+	}
+
+	chat := `{"messages":[{"role":"tool","tool_call_id":"` + long + `","content":[{"type":"function_call","call_id":"` + long + `","name":"f","arguments":"{}"}]}]}`
+	sanitized, changed, err = StripEmbeddedThoughtSignatures([]byte(chat))
+	if err != nil || !changed {
+		t.Fatalf("chat tool message changed=%t err=%v", changed, err)
+	}
+	message := decodeTestJSON(t, sanitized)["messages"].([]any)[0].(map[string]any)
+	nested := message["content"].([]any)[0].(map[string]any)
+	if message["tool_call_id"] != "call_payload" || nested["call_id"] != long {
+		t.Fatalf("chat tool output rewritten: %#v", message)
+	}
+}
+
+func TestStripEmbeddedThoughtSignaturesFitsOversizedBase(t *testing.T) {
+	base := "call_" + strings.Repeat("b", 80)
+	other := "call_" + strings.Repeat("c", 80)
+	full := base + "_ts_" + strings.Repeat("S", 40)
+	again := base + "_ts_" + strings.Repeat("T", 12)
+	body := `{"input":[{"type":"function_call","call_id":"` + full + `","name":"f","arguments":"{}"},{"type":"function_call_output","call_id":"` + again + `","output":"ok"}]}`
+	sanitized, changed, err := StripEmbeddedThoughtSignatures([]byte(body))
+	if err != nil || !changed {
+		t.Fatalf("changed=%t err=%v", changed, err)
+	}
+	got := decodeTestJSON(t, sanitized)
+	input := got["input"].([]any)
+	callID := input[0].(map[string]any)["call_id"].(string)
+	outputID := input[1].(map[string]any)["call_id"].(string)
+	if callID != outputID || len(callID) > 64 || callID == base || !strings.HasPrefix(callID, "id_") {
+		t.Fatalf("fitted ids call=%q output=%q len=%d", callID, outputID, len(callID))
+	}
+	repeat, _, err := StripEmbeddedThoughtSignatures([]byte(body))
+	if err != nil || string(repeat) != string(sanitized) {
+		t.Fatal("shortening is not stable")
+	}
+	otherBody := `{"input":[{"type":"function_call","call_id":"` + other + `_ts_sig","name":"f","arguments":"{}"}]}`
+	otherSanitized, _, err := StripEmbeddedThoughtSignatures([]byte(otherBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherID := decodeTestJSON(t, otherSanitized)["input"].([]any)[0].(map[string]any)["call_id"].(string)
+	if otherID == callID || len(otherID) > 64 {
+		t.Fatalf("distinct bases collapsed to %q", otherID)
 	}
 }

@@ -1,11 +1,13 @@
 package bifrost
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/tidwall/gjson"
 
 	"gpt-load/internal/channel"
@@ -61,5 +63,60 @@ func TestNativePassthroughSanitizesSwitchedHistory(t *testing.T) {
 	}
 	if len(gjson.GetBytes(body, "messages.1.content").Array()) != 2 {
 		t.Fatalf("DeepSeek thinking history removed: %s", body)
+	}
+}
+
+func TestResponsesPassthroughShortensToolCallIDs(t *testing.T) {
+	longID := "call_g_ts_" + strings.Repeat("S", 1200)
+	spec := switchedHistorySpec(string(channel.OpenAI), protocol.OpenAIResponses, execution.OperationResponsesPassthrough,
+		"/v1/responses/resp_private/vendor_action", "gpt-4o",
+		`{"model":"gpt-4o","input":[{"type":"function_call","call_id":"`+longID+`","name":"f","arguments":"{}"},{"type":"function_call_output","call_id":"`+longID+`","output":"ok"}]}`)
+	body, _, err := sanitizeNativePassthroughRequest(spec, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range gjson.GetBytes(body, "input.#.call_id").Array() {
+		if id.String() != "call_g" {
+			t.Fatalf("passthrough call_id not shortened: %s", body)
+		}
+	}
+}
+
+func TestConvertedOpenAIRouteShortensToolCallIDs(t *testing.T) {
+	longID := "call_g_ts_" + strings.Repeat("S", 1200)
+	payload := []byte(`{"model":"gpt-4o","input":[{"type":"function_call","call_id":"` + longID + `","name":"f","arguments":"{\"call_id\":\"` + longID + `\"}"},{"type":"function_call_output","call_id":"` + longID + `","output":"ok"}]}`)
+	for _, provider := range []channel.ProviderKind{channel.ProviderOpenAI, channel.ProviderGroq, channel.ProviderOpenAICompatible} {
+		sanitized, err := sanitizeConvertedOpenAIHistory(provider, "gpt-4o", payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec := execution.AttemptSpec{
+			RouteMode: execution.RouteConverted, ClientProtocol: protocol.OpenAIResponses,
+			Operation: execution.OperationResponsesCreate, ClientModel: "gpt-4o", UpstreamModel: "gpt-4o",
+			Body: sanitized,
+		}
+		request, err := buildConvertedResponsesRequest(spec, schemas.OpenAI)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := gjson.GetBytes(encoded, "input.#.call_id").Array()
+		if len(ids) != 2 || ids[0].String() != "call_g" || ids[1].String() != "call_g" {
+			t.Fatalf("%s converted call ids = %s", provider, encoded)
+		}
+		if !bytes.Contains(encoded, []byte(longID)) {
+			t.Fatalf("%s converted request dropped the tool argument id", provider)
+		}
+	}
+	kept, err := sanitizeConvertedOpenAIHistory(channel.ProviderAnthropic, "claude-sonnet-4-6", payload)
+	if err != nil || string(kept) != string(payload) {
+		t.Fatalf("non-OpenAI conversion changed history: %s", kept)
+	}
+	if !openAIShapedCallIDs(channel.ProviderGoogleVertex, "gpt-4o") ||
+		openAIShapedCallIDs(channel.ProviderGoogleVertex, "claude-sonnet-4-6") {
+		t.Fatal("vertex OpenAI wire detection mismatch")
 	}
 }

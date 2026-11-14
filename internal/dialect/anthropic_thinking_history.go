@@ -28,11 +28,11 @@ func IsClaudeModel(model string) bool {
 }
 
 // SanitizeClaudeThinkingHistory removes unsigned thinking blocks from assistant
-// messages of an Anthropic Messages request. When such a block is removed from
-// the final assistant message while it carries tool_use, the request's thinking
-// is disabled: Claude requires that message to start with its own signed
-// thinking whenever thinking is enabled. Unchanged bodies are returned as the
-// original bytes.
+// messages of an Anthropic Messages request. Claude merges adjacent assistant
+// messages into one turn and requires that turn to start with its own signed
+// thinking whenever thinking is enabled and the turn calls a tool. Unsigned
+// thinking removed anywhere in that final run therefore disables thinking for
+// the request. Unchanged bodies are returned as the original bytes.
 func SanitizeClaudeThinkingHistory(body []byte) ([]byte, bool, error) {
 	var request map[string]json.RawMessage
 	if err := json.Unmarshal(body, &request); err != nil || request == nil {
@@ -46,7 +46,6 @@ func SanitizeClaudeThinkingHistory(body []byte) ([]byte, bool, error) {
 	if err := json.Unmarshal(rawMessages, &messages); err != nil {
 		return body, false, nil
 	}
-	lastAssistant := -1
 	roles := make([]string, len(messages))
 	for index, rawMessage := range messages {
 		var message struct {
@@ -54,14 +53,13 @@ func SanitizeClaudeThinkingHistory(body []byte) ([]byte, bool, error) {
 		}
 		if json.Unmarshal(rawMessage, &message) == nil {
 			roles[index] = message.Role
-			if message.Role == "assistant" {
-				lastAssistant = index
-			}
 		}
 	}
 
 	changed := false
-	disableThinking := false
+	finalRunRemoved := false
+	finalRunToolUse := false
+	runStart, runEnd := finalAssistantRun(roles)
 	kept := make([]json.RawMessage, 0, len(messages))
 	for index, rawMessage := range messages {
 		if roles[index] != "assistant" {
@@ -69,13 +67,20 @@ func SanitizeClaudeThinkingHistory(body []byte) ([]byte, bool, error) {
 			continue
 		}
 		updated, removed, hasToolUse, empty := removeUnsignedThinking(rawMessage)
+		inFinalRun := index >= runStart && index <= runEnd
 		if removed == 0 {
+			if inFinalRun && hasToolUse {
+				finalRunToolUse = true
+			}
 			kept = append(kept, rawMessage)
 			continue
 		}
 		changed = true
-		if index == lastAssistant && hasToolUse {
-			disableThinking = true
+		if inFinalRun {
+			finalRunRemoved = true
+			if hasToolUse {
+				finalRunToolUse = true
+			}
 		}
 		if empty {
 			// Claude rejects assistant turns without content; adjacent turns of
@@ -84,6 +89,7 @@ func SanitizeClaudeThinkingHistory(body []byte) ([]byte, bool, error) {
 		}
 		kept = append(kept, updated)
 	}
+	disableThinking := finalRunRemoved && finalRunToolUse
 	if !changed {
 		return body, false, nil
 	}
@@ -105,6 +111,26 @@ func SanitizeClaudeThinkingHistory(body []byte) ([]byte, bool, error) {
 // removeUnsignedThinking drops thinking blocks that Claude cannot verify from
 // one assistant message. It returns the updated message, how many blocks were
 // removed, whether the message calls tools and whether no content remains.
+// finalAssistantRun is the last contiguous group of assistant messages.
+// Claude combines that group into one turn.
+func finalAssistantRun(roles []string) (start, end int) {
+	end = -1
+	for index := len(roles) - 1; index >= 0; index-- {
+		if roles[index] == "assistant" {
+			end = index
+			break
+		}
+	}
+	if end < 0 {
+		return -1, -1
+	}
+	start = end
+	for start > 0 && roles[start-1] == "assistant" {
+		start--
+	}
+	return start, end
+}
+
 func removeUnsignedThinking(raw json.RawMessage) (json.RawMessage, int, bool, bool) {
 	var message map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &message); err != nil || message == nil {

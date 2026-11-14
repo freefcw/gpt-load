@@ -195,9 +195,13 @@ func sanitizeNativeRequestBody(spec execution.AttemptSpec, stream bool) ([]byte,
 			}
 		}
 		if !changed {
-			return append([]byte(nil), spec.Body...), nil
+			return sanitizeUpstreamChatHistory(spec, append([]byte(nil), spec.Body...))
 		}
-		return encodeNativeJSONObject(object)
+		body, err := encodeNativeJSONObject(object)
+		if err != nil {
+			return nil, err
+		}
+		return sanitizeUpstreamChatHistory(spec, body)
 	default:
 		if len(bytes.TrimSpace(spec.Body)) == 0 {
 			return nil, nil
@@ -208,6 +212,30 @@ func sanitizeNativeRequestBody(spec execution.AttemptSpec, stream bool) ([]byte,
 		}
 		stripNativeControlFields(object)
 		return encodeNativeJSONObject(object)
+	}
+}
+
+// sanitizeConvertedOpenAIHistory shortens Gemini thought-signature call IDs
+// on the client body before a converted request is parsed into the Bifrost
+// schema. Only OpenAI-shaped upstreams enforce the 64-character call ID limit.
+func sanitizeConvertedOpenAIHistory(providerKind channel.ProviderKind, upstreamModel string, body []byte) ([]byte, error) {
+	if !openAIShapedCallIDs(providerKind, upstreamModel) {
+		return body, nil
+	}
+	sanitized, _, err := dialect.StripEmbeddedThoughtSignatures(body)
+	return sanitized, err
+}
+
+func openAIShapedCallIDs(providerKind channel.ProviderKind, upstreamModel string) bool {
+	switch providerKind {
+	case channel.ProviderOpenAI, channel.ProviderAzureOpenAI, channel.ProviderOpenAICompatible,
+		channel.ProviderAlibaba, channel.ProviderDeepSeek, channel.ProviderOpenRouter,
+		channel.ProviderGroq, channel.ProviderXAI, channel.ProviderCline:
+		return true
+	case channel.ProviderGoogleVertex:
+		return vertexUsesChatFallback(upstreamModel)
+	default:
+		return false
 	}
 }
 

@@ -8,7 +8,7 @@
 
 把 API Key、订阅账号、流量调度、故障处理、请求日志与用量统计，收进同一个入口。
 
-[English](README.md) · 中文 · [日本語](README_JP.md) | [官方网站](https://www.gpt-load.com)
+[English](README.md) · 中文 · [日本語](README_JP.md) | [官方网站](https://gpt-load.com)
 
 [![Release](https://img.shields.io/github/v/tag/tbphp/gpt-load?filter=v2.*)](https://github.com/tbphp/gpt-load/releases)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io%2Ftbphp%2Fgpt--load%3A2-2496ED?logo=docker&logoColor=white)](https://github.com/tbphp/gpt-load/pkgs/container/gpt-load)
@@ -244,7 +244,6 @@ Windows 普通用户可改为下载 `gpt-load-windows-setup.exe`。双击并确�
 | `HTTP_PROXY`                    | 空                                          | HTTP 上游请求的环境代理。                                                                                                                                |
 | `HTTPS_PROXY`                   | 空                                          | HTTPS 上游请求的环境代理。                                                                                                                               |
 | `NO_PROXY`                      | 空                                          | 逗号分隔的不经过环境代理的主机、域名或 IP。                                                                                                              |
-| `UPSTREAM_USER_AGENT_FALLBACK` | 空，使用 `GPT-Load/<version>` | 普通渠道 API 请求、凭据探测、模型发现和 Responses WebSocket 握手的兜底 User-Agent。仅在请求头规则应用后最终 UA 缺失、为空或全是空白时生效，不覆盖规则或客户端提供的非空 UA。例如 `Go-http-client/1.1`（固定值，不随 HTTP 协议变化）。不改变订阅适配器身份。修改后重启。 |
 | `LOG_LEVEL`                     | `info`                                      | 支持 `panic`、`fatal`、`error`、`warn`、`warning`、`info`、`debug`、`trace`；无效值会告警并回退到 `info`。                                               |
 | `LOG_FORMAT`                    | `text`                                      | 支持 `text`、`json`；其他值会导致启动失败。                                                                                                              |
 | `MODELS_DEV_AUTO_SYNC_ENABLED`  | 未设置，初始默认 `true`                     | 未设置时使用管理界面的持久化设置；设置后强制开启或关闭 Models.dev 自动同步，并使管理界面中的同名选项变为只读。                                           |
@@ -258,7 +257,7 @@ Windows 普通用户可改为下载 `gpt-load-windows-setup.exe`。双击并确�
 > [!WARNING]
 > GPT-Load 2.0 是完整重写的新版本，**不能**打开、导入或原地迁移 1.x 数据。
 
-部署 2.0 时请使用独立的数据库、`DATA_DIR`、端口和 Docker 卷，验证完成后再切换业务流量，并在回滚窗口关闭前保留原 1.x 部署。1.4.x 维护线文档见[官方文档](https://www.gpt-load.com/docs?lang=zh)。
+部署 2.0 时请使用独立的数据库、`DATA_DIR`、端口和 Docker 卷，验证完成后再切换业务流量，并在回滚窗口关闭前保留原 1.x 部署。1.4.x 维护线文档见[官方文档](https://gpt-load.com/zh/v1/docs)。
 
 ## 开源依赖
 

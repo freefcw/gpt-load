@@ -8,7 +8,7 @@
 
 API keys, subscription accounts, traffic scheduling, failure handling, request logs, and usage accounting — behind a single entry point.
 
-English · [中文](README_CN.md) · [日本語](README_JP.md) | [Official Website](https://www.gpt-load.com)
+English · [中文](README_CN.md) · [日本語](README_JP.md) | [Official Website](https://gpt-load.com)
 
 [![Release](https://img.shields.io/github/v/tag/tbphp/gpt-load?filter=v2.*)](https://github.com/tbphp/gpt-load/releases)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io%2Ftbphp%2Fgpt--load%3A2-2496ED?logo=docker&logoColor=white)](https://github.com/tbphp/gpt-load/pkgs/container/gpt-load)
@@ -244,7 +244,6 @@ At startup, the application reads `.env` in the current directory; existing proc
 | `HTTP_PROXY` | Empty | Environment proxy for HTTP upstream requests. |
 | `HTTPS_PROXY` | Empty | Environment proxy for HTTPS upstream requests. |
 | `NO_PROXY` | Empty | Comma-separated hosts, domains, or IPs that bypass the environment proxy. |
-| `UPSTREAM_USER_AGENT_FALLBACK` | Empty, uses `GPT-Load/<version>` | Fallback User-Agent for ordinary-channel API requests, credential probes, model discovery, and Responses WebSocket handshakes. Used only when the final UA is missing, empty, or whitespace-only after header rules; nonempty rule/client values take precedence. Example: `Go-http-client/1.1` (fixed, not protocol-dependent). Subscription adapter identities are unchanged. Restart after changes. |
 | `LOG_LEVEL` | `info` | Supports `panic`, `fatal`, `error`, `warn`, `warning`, `info`, `debug`, and `trace`; invalid values warn and fall back to `info`. |
 | `LOG_FORMAT` | `text` | Supports `text` and `json`; any other value fails startup. |
 | `MODELS_DEV_AUTO_SYNC_ENABLED` | Unset, initial default `true` | When unset, uses the persisted management UI setting; when set, forces Models.dev auto-sync on or off and makes the same UI option read-only. |
@@ -258,7 +257,7 @@ Environment proxies apply only when no proxy is specified on the credential, gro
 > [!WARNING]
 > GPT-Load 2.0 is a complete rewrite. It **cannot** open, import, or migrate 1.x data in place.
 
-Deploy 2.0 with its own database, `DATA_DIR`, port, and Docker volume. Cut traffic over only after verification, and keep the original 1.x deployment until the rollback window closes. Documentation for the 1.4.x maintenance line is at the [official docs](https://www.gpt-load.com/docs).
+Deploy 2.0 with its own database, `DATA_DIR`, port, and Docker volume. Cut traffic over only after verification, and keep the original 1.x deployment until the rollback window closes. Documentation for the 1.4.x maintenance line is at the [official docs](https://gpt-load.com/en/v1/docs).
 
 ## Open-source dependencies
 

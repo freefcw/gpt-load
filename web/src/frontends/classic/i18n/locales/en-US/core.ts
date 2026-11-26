@@ -147,6 +147,7 @@ export default {
       add: 'Add rule',
       action: 'Action',
       set: 'Set',
+      default: 'Default',
       remove: 'Remove',
       name: 'Header name',
       value: 'Header value',

@@ -8,7 +8,7 @@
 
 API キー、サブスクリプションアカウント、トラフィック制御、障害処理、リクエストログ、使用量集計を一つの入口にまとめます。
 
-[English](README.md) · [中文](README_CN.md) · 日本語 | [公式サイト](https://www.gpt-load.com)
+[English](README.md) · [中文](README_CN.md) · 日本語 | [公式サイト](https://gpt-load.com)
 
 [![Release](https://img.shields.io/github/v/tag/tbphp/gpt-load?filter=v2.*)](https://github.com/tbphp/gpt-load/releases)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io%2Ftbphp%2Fgpt--load%3A2-2496ED?logo=docker&logoColor=white)](https://github.com/tbphp/gpt-load/pkgs/container/gpt-load)
@@ -244,7 +244,6 @@ Windows の一般ユーザーは代わりに `gpt-load-windows-setup.exe` を利
 | `HTTP_PROXY` | 空 | HTTP アップストリームリクエストの環境プロキシ。 |
 | `HTTPS_PROXY` | 空 | HTTPS アップストリームリクエストの環境プロキシ。 |
 | `NO_PROXY` | 空 | 環境プロキシをバイパスするホスト、ドメイン、IP のカンマ区切りリスト。 |
-| `UPSTREAM_USER_AGENT_FALLBACK` | 空、`GPT-Load/<version>` を使用 | 通常チャネルの API リクエスト、認証情報テスト、モデル検出、Responses WebSocket ハンドシェイク用のフォールバック User-Agent。ヘッダールール適用後の UA が未指定・空・空白のみの場合に使用し、ルールやクライアントの空でない UA は維持します。例：`Go-http-client/1.1`（HTTP プロトコルに依存しない固定値）。サブスクリプションアダプターの識別情報は変更しません。変更後は再起動が必要です。 |
 | `LOG_LEVEL` | `info` | `panic`、`fatal`、`error`、`warn`、`warning`、`info`、`debug`、`trace` に対応します。無効な値は警告を出して `info` に戻ります。 |
 | `LOG_FORMAT` | `text` | `text` と `json` に対応します。それ以外の値では起動に失敗します。 |
 | `MODELS_DEV_AUTO_SYNC_ENABLED` | 未設定、初期既定値 `true` | 未設定時は管理画面に保存された設定を使用します。設定時は Models.dev の自動同期を強制的に有効または無効にし、管理画面の同名オプションを読み取り専用にします。 |
@@ -258,7 +257,7 @@ Windows の一般ユーザーは代わりに `gpt-load-windows-setup.exe` を利
 > [!WARNING]
 > GPT-Load 2.0 は完全な書き直しです。1.x のデータを開く・インポートする・その場で移行することは**できません**。
 
-2.0 は独立したデータベース、`DATA_DIR`、ポート、Docker ボリュームでデプロイしてください。検証完了後に本番トラフィックを切り替え、ロールバック期間が終了するまで既存の 1.x 環境を保持してください。1.4.x メンテナンスラインのドキュメントは[公式ドキュメント](https://www.gpt-load.com/docs?lang=ja)にあります。
+2.0 は独立したデータベース、`DATA_DIR`、ポート、Docker ボリュームでデプロイしてください。検証完了後に本番トラフィックを切り替え、ロールバック期間が終了するまで既存の 1.x 環境を保持してください。1.4.x メンテナンスラインのドキュメントは[公式ドキュメント](https://gpt-load.com/ja/v1/docs)にあります。
 
 ## オープンソース依存
 

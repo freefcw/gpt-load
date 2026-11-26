@@ -124,7 +124,8 @@ export const zhCN = {
   removeHeader: '移除此请求头',
   removeHeaders: '删除请求头',
   oneHeaderPerLine: '每行一个名称',
-  invalidHeaders: '请求头名称不能为空或重复，内容不能包含换行。',
+  invalidHeaders: '请求头名称不能为空，内容不能包含换行。',
+  duplicateHeaderNames: '设置、兜底和删除中的请求头名称不能重复，且不区分大小写。',
   parameters: '参数覆盖',
   invalidRules: '请输入有效的规则数组，包含 match 和 set / remove。',
   authState: {
@@ -292,7 +293,9 @@ export const enUS: typeof zhCN = {
   removeHeader: 'Remove this header',
   removeHeaders: 'Remove headers',
   oneHeaderPerLine: 'One name per line',
-  invalidHeaders: 'Header names must be unique and non-empty. Values cannot contain line breaks.',
+  invalidHeaders: 'Header names must be non-empty. Values cannot contain line breaks.',
+  duplicateHeaderNames:
+    'A header name cannot appear more than once across set, default, and remove. Matching ignores case.',
   parameters: 'Parameter overrides',
   invalidRules: 'Enter a valid array of rules containing match and set / remove.',
   authState: {
@@ -459,7 +462,9 @@ export const jaJP: typeof zhCN = {
   removeHeader: 'このヘッダーを削除',
   removeHeaders: '削除するヘッダー',
   oneHeaderPerLine: '1 行に 1 つの名前',
-  invalidHeaders: 'ヘッダー名は空欄や重複にできません。値に改行は使用できません。',
+  invalidHeaders: 'ヘッダー名は空欄にできません。値に改行は使用できません。',
+  duplicateHeaderNames:
+    '設定、既定値、削除で同じヘッダー名は使えません。大文字小文字は区別しません。',
   parameters: 'パラメータ上書き',
   invalidRules: 'match と set / remove を含む有効なルール配列を入力してください。',
   authState: {

@@ -41,6 +41,7 @@ import {
 } from '@modern/components/ui'
 import { useApiClient } from '@shared/http/client-context'
 import { groupConnectionParams, validBaseURL } from './group-create-rules'
+import { duplicateGroupHeaderNames, validGroupHeaderName } from './group-header-rules'
 import { validProxySelection } from '@shared/proxies/api'
 import ProxySelect from '../proxies/ProxySelect.vue'
 import GroupChannelSelect from './GroupChannelSelect.vue'
@@ -76,7 +77,7 @@ const liveOptions = computed(() => [
 const proxyMode = ref('inherit')
 const proxyID = ref('')
 const headersMode = ref('inherit')
-const headers = ref<{ key: number; name: string; value: string }[]>([])
+const headers = ref<{ key: number; name: string; value: string; action: 'set' | 'default' }[]>([])
 const removeHeaders = ref('')
 const rules = ref<ParameterRule[]>([])
 const errorRules = ref<ErrorRule[]>([])
@@ -142,11 +143,20 @@ watch(
     proxyID.value = ''
     headersMode.value = data.overrides.header_rules === undefined ? 'inherit' : 'override'
     const value = data.overrides.header_rules ?? data.effective.header_rules
-    headers.value = Object.entries(value.set).map(([name, value]) => ({
-      key: nextHeader++,
-      name,
-      value,
-    }))
+    headers.value = [
+      ...Object.entries(value.set).map(([name, value]) => ({
+        key: nextHeader++,
+        name,
+        value,
+        action: 'set' as const,
+      })),
+      ...Object.entries(value.default ?? {}).map(([name, value]) => ({
+        key: nextHeader++,
+        name,
+        value,
+        action: 'default' as const,
+      })),
+    ]
     removeHeaders.value = value.remove.join('\n')
     rules.value = JSON.parse(JSON.stringify(data.overrides.parameter_overrides ?? []))
     errorRulesMode.value = data.overrides.error_rules === undefined ? 'inherit' : 'override'
@@ -214,17 +224,18 @@ const proxyInvalid = computed(
     proxyMode.value === 'custom' &&
     !validProxySelection(proxyID.value.trim()),
 )
-const headerInvalid = computed(() => {
+const headerFormatInvalid = computed(() => {
   if (headersMode.value !== 'override') return false
-  const names = headers.value.map((header) => header.name.trim().toLowerCase())
-  return (
-    new Set(names).size !== names.length ||
-    headers.value.some(
-      (header) =>
-        !/^[!#$%&'*+.^_`|~\w-]+$/u.test(header.name.trim()) || /[\r\n]/u.test(header.value),
-    )
+  return headers.value.some(
+    (header) => !validGroupHeaderName(header.name) || /[\r\n]/u.test(header.value),
   )
 })
+const headerNamesDuplicated = computed(
+  () =>
+    headersMode.value === 'override' &&
+    duplicateGroupHeaderNames(headers.value, removeHeaders.value),
+)
+const headerInvalid = computed(() => headerFormatInvalid.value || headerNamesDuplicated.value)
 async function save(): Promise<void> {
   if (!saved.value || !dirty.value || saving.value || switching.value) return
   attempted.value = true
@@ -277,7 +288,20 @@ async function save(): Promise<void> {
   if (headersMode.value === 'inherit') delete overrides.header_rules
   else
     overrides.header_rules = {
-      set: Object.fromEntries(headers.value.map((header) => [header.name.trim(), header.value])),
+      set: Object.fromEntries(
+        headers.value
+          .filter((header) => header.action === 'set')
+          .map((header) => [header.name.trim(), header.value]),
+      ),
+      ...(headers.value.some((header) => header.action === 'default')
+        ? {
+            default: Object.fromEntries(
+              headers.value
+                .filter((header) => header.action === 'default')
+                .map((header) => [header.name.trim(), header.value]),
+            ),
+          }
+        : {}),
       remove: removeHeaders.value
         .split(/\r?\n/u)
         .map((value) => value.trim())
@@ -566,7 +590,7 @@ useMessageSource(() => (error.value ? { text: error.value, tone: 'danger' } : un
         :title="t('groupDetail.headers')"
         :add-label="t('groupDetail.addHeader')"
         :add-disabled="busy || headersMode === 'inherit'"
-        @add="headers.push({ key: nextHeader++, name: '', value: '' })"
+        @add="headers.push({ key: nextHeader++, name: '', value: '', action: 'set' })"
       >
         <template #actions>
           <AppSegmentedControl
@@ -580,11 +604,23 @@ useMessageSource(() => (error.value ? { text: error.value, tone: 'danger' } : un
         </template>
         <template v-if="headersMode === 'override'">
           <div v-if="headers.length" class="modern-advanced-header-labels" aria-hidden="true">
-            <span>{{ t('groupDetail.headerName') }}</span><span>{{
-              t('groupDetail.headerValue')
-            }}</span>
+            <span>{{ t('settingsForm.headers.action') }}</span>
+            <span>{{ t('groupDetail.headerName') }}</span>
+            <span>{{ t('groupDetail.headerValue') }}</span>
           </div>
           <div v-for="header in headers" :key="header.key" class="modern-advanced-header-row">
+            <AppSelect
+              :model-value="header.action"
+              :options="[
+                { value: 'set', label: t('settingsForm.headers.set') },
+                { value: 'default', label: t('settingsForm.headers.default') },
+              ]"
+              :label="t('settingsForm.headers.action')"
+              :label-hidden="!isMobile"
+              size="xs"
+              :disabled="busy"
+              @update:model-value="header.action = $event === 'default' ? 'default' : 'set'"
+            />
             <AppTextField
               v-model="header.name"
               :label="t('groupDetail.headerName')"
@@ -618,7 +654,10 @@ useMessageSource(() => (error.value ? { text: error.value, tone: 'danger' } : un
             mono
             :disabled="busy"
           />
-          <AppNotice v-if="attempted && headerInvalid" tone="danger">{{
+          <AppNotice v-if="attempted && headerNamesDuplicated" tone="danger">{{
+            t('groupDetail.duplicateHeaderNames')
+          }}</AppNotice>
+          <AppNotice v-if="attempted && headerFormatInvalid" tone="danger">{{
             t('groupDetail.invalidHeaders')
           }}</AppNotice>
         </template>
@@ -719,7 +758,7 @@ useMessageSource(() => (error.value ? { text: error.value, tone: 'danger' } : un
 .modern-advanced-header-labels,
 .modern-advanced-header-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) var(--modern-control-xs);
+  grid-template-columns: 100px minmax(0, 1fr) minmax(0, 1.5fr) var(--modern-control-xs);
   align-items: start;
   gap: var(--modern-space-2);
 }

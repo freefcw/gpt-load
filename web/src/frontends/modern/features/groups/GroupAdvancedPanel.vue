@@ -41,6 +41,7 @@ import {
 } from '@modern/components/ui'
 import { useApiClient } from '@shared/http/client-context'
 import { groupConnectionParams, validBaseURL } from './group-create-rules'
+import { duplicateGroupHeaderNames, validGroupHeaderName } from './group-header-rules'
 import { validProxySelection } from '@shared/proxies/api'
 import ProxySelect from '../proxies/ProxySelect.vue'
 import GroupChannelSelect from './GroupChannelSelect.vue'
@@ -223,17 +224,18 @@ const proxyInvalid = computed(
     proxyMode.value === 'custom' &&
     !validProxySelection(proxyID.value.trim()),
 )
-const headerInvalid = computed(() => {
+const headerFormatInvalid = computed(() => {
   if (headersMode.value !== 'override') return false
-  const names = headers.value.map((header) => header.name.trim().toLowerCase())
-  return (
-    new Set(names).size !== names.length ||
-    headers.value.some(
-      (header) =>
-        !/^[!#$%&'*+.^_`|~\w-]+$/u.test(header.name.trim()) || /[\r\n]/u.test(header.value),
-    )
+  return headers.value.some(
+    (header) => !validGroupHeaderName(header.name) || /[\r\n]/u.test(header.value),
   )
 })
+const headerNamesDuplicated = computed(
+  () =>
+    headersMode.value === 'override' &&
+    duplicateGroupHeaderNames(headers.value, removeHeaders.value),
+)
+const headerInvalid = computed(() => headerFormatInvalid.value || headerNamesDuplicated.value)
 async function save(): Promise<void> {
   if (!saved.value || !dirty.value || saving.value || switching.value) return
   attempted.value = true
@@ -652,7 +654,10 @@ useMessageSource(() => (error.value ? { text: error.value, tone: 'danger' } : un
             mono
             :disabled="busy"
           />
-          <AppNotice v-if="attempted && headerInvalid" tone="danger">{{
+          <AppNotice v-if="attempted && headerNamesDuplicated" tone="danger">{{
+            t('groupDetail.duplicateHeaderNames')
+          }}</AppNotice>
+          <AppNotice v-if="attempted && headerFormatInvalid" tone="danger">{{
             t('groupDetail.invalidHeaders')
           }}</AppNotice>
         </template>
